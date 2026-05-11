@@ -1,0 +1,11 @@
+Effective Refractive Indices:
+rel_box_size:     0.001
+rel_grid_spacing: 20
+rel_tolerance:    0
+eigenvectors:     4
+boundary cond:    0000
+Wavelengths from 1.55 um to 1.55 um in 1 steps
+Heights from 0.8 um to 0.8 um in 1 steps
+Widths from 2.5 um to 2.5 um in 1 steps
+height	width	frequency	Ex_n_eff		Ex_frac	Ex_core	Ex_A_eff		Ey_n_eff		Ey_frac	Ey_core	Ey_A_eff
+800   	2500  	193.414		1.86148581156	0.978	0.913	1.46574e-12		1.82485578019	0.874	0.819	1.8677e-12
