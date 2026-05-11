@@ -1,1 +1,9 @@
+# Dependencies
 EMpy/
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# macOS files
+.DS_Store
