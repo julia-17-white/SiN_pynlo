@@ -97,7 +97,7 @@ omega = 2*np.pi * pulse.v_grid  # angular frequency [rad/s]
 #---- Mode
 mode = pynlo.medium.Mode(v_grid, beta_v, alpha = None, g3=g3_v)
 beta2 = mode.beta2
-print("β₂:", beta2)
+print("β₂:", np.mean(beta2))
 print("LD =", T0**2 / abs(np.average(beta2)))
 
 length = 0.01
@@ -171,12 +171,12 @@ plt.show()
 t = pulse.t_grid
 I_out = np.abs(a_t[-1])**2
 
-plt.plot(t*1e12, I_out)
-plt.axhline(0, color='k')
-plt.xlabel("Time (ps)")
-plt.ylabel("Intensity")
-plt.title("Output temporal profile")
-plt.show()
+# plt.plot(t*1e12, I_out)
+# plt.axhline(0, color='k')
+# plt.xlabel("Time (ps)")
+# plt.ylabel("Intensity")
+# plt.title("Output temporal profile")
+# plt.show()
 
 margin = 0.1 * np.ptp(pulse.t_grid)
 edge_mask = np.abs(pulse.t_grid) > (np.ptp(pulse.t_grid)/2 - margin)

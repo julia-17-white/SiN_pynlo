@@ -39,11 +39,11 @@ def modeparams(Ex,solver_x,solver_y,wl,neff):
     Ex_i = EMpy.utils.interp2(x,y,EMpy.utils.centered1d(solver_x),EMpy.utils.centered1d(solver_y),Ex)
     I = 0.5*e0*epsfunc(x,y,wl)*c*np.abs(Ex_i)**2
 
-    n2eff_numr=np.trapz(np.trapz(np.sqrt(epsfunc(x,y,wl))*n2(x,y)*I**2,x),y)
-    n2eff_denr=neff*np.trapz(np.trapz(I**2,x),y)
+    n2eff_numr=np.trapezoid(np.trapezoid(np.sqrt(epsfunc(x,y,wl))*n2(x,y)*I**2,x),y)
+    n2eff_denr=neff*np.trapezoid(np.trapezoid(I**2,x),y)
 
     n2eff=n2eff_numr/n2eff_denr
-    Aeff = np.trapz(np.trapz(I,x),y)**2/(np.trapz(np.trapz(I**2,x),y))
+    Aeff = np.trapezoid(np.trapezoid(I,x),y)**2/(np.trapezoid(np.trapezoid(I**2,x),y))
     w = 2*np.pi*c/wl*1e6
     gamma = n2eff*w/(c*Aeff)
     
@@ -51,7 +51,7 @@ def modeparams(Ex,solver_x,solver_y,wl,neff):
 
 
 c = speed_of_light
-ldas = np.linspace(0.5,3.02,64)
+ldas = np.linspace(0.4,2.4,50)
 
 #ldas = np.array([1.55])
 
@@ -65,7 +65,7 @@ tol = 1e-4
 boundary = '000S'
 
 # widths = np.linspace(0.8,5.,43)
-widths = np.array([0.9])
+widths = np.array([1.0])
 
 import time
 
@@ -84,7 +84,7 @@ for j in range(len(widths)):
         return np.where((np.abs(xx.T) <= width/2.0) *
                       (np.abs(yy.T) <= height/2.0),
                       sinIndex(wl)**2,
-                      sio2Index(wl)**2)
+                      1.0) # sio2Index(wl)**2
     
     
     for k in range(len(ldas)):
@@ -96,13 +96,14 @@ for j in range(len(widths)):
         solver = EMpy.modesolvers.FD.SVFDModeSolver(wl, x, y, efunc, boundary,
                                                     method='Ex').solve(neigs, tol)
         print(f'run time: {time.time()-start}')
-        #Aeffs[k],gammas[k] = modeparams(solver.Ex[0],solver.x,solver.y,wl,solver.neff[0])
+        Aeffs[k],gammas[k] = modeparams(solver.Ex[0],solver.x,solver.y,wl,solver.neff[0])
         
         neffs[k] = solver.neff[0]
-        print('(wavelength, n_eff):')
-        print(wl, neffs[k])
+        print('(wavelength, n_eff, gamma, a_eff):')
+        print(wl, neffs[k], gammas[k], Aeffs[k])
+        print('')
     
-    np.save('JW_SiN_O2Clad_800nmThickness_' + str(int(width*1000)) + 'nmWidth.npy',np.column_stack([ldas,neffs]))
+    np.save('from_abijith/jw_modes/JW_SiN_AirClad_800nmThickness_' + str(int(width*1000)) + 'nmWidth_gamma_aeff.npy',np.column_stack([ldas,neffs,gammas,Aeffs]))
 
 
 dlda = np.diff(ldas)[0]
