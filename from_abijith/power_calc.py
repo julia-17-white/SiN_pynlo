@@ -9,7 +9,7 @@ print(np.mean(gammas))
 t_0 = 220e-15 # s (pulse width)
 gamma = np.mean(gammas)
 N = np.sqrt(2) # N^2 > 2 from Prem Kumar's paper
-beta2 = 1e-24 # s^2/m from PyNLO simulations
+beta2 = 4.1e-25 # s^2/m from PyNLO simulations
 rep_rate = 1e9 # Hz
 
 

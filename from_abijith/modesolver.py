@@ -57,15 +57,15 @@ ldas = np.linspace(0.4,2.4,50)
 
 #ldas = np.linspace(1., 2., 20)
 #ldas = np.array([])
-x = np.linspace(-4, 4, 400)
-y = np.linspace(-4, 4, 400)
+x = np.linspace(-6, 6, 400)
+y = np.linspace(-6, 6, 400)
 
 neigs = 1
 tol = 1e-4
 boundary = '000S'
 
 # widths = np.linspace(0.8,5.,43)
-widths = np.array([1.0])
+widths = np.array([5.0])
 
 import time
 

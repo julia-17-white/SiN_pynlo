@@ -31,7 +31,7 @@ import pynlo
 v_min = c/4000e-9
 v_max = c/400e-9
 v0 = c/1560e-9
-e_p = 50e-12 
+e_p = 50e-12
 # e_p = 3.5e-11
 t_fwhm = 210e-15
 # t_fwhm = 50e-15
@@ -57,48 +57,59 @@ v_grid = pulse.v_grid
 #%% SiN waveguide
 thickness = 600e-9 # 420, 350
 width = 1200e-9 # 1300, 1800
-import ri_interpolator
-sim_freqs = ri_interpolator.sim_freqs
-sim_oversample = np.linspace(sim_freqs.min(), sim_freqs.max(), sim_freqs.size*100)
-sim_n_eff, sim_gamma, sim_a_eff = ri_interpolator.refractive_index_and_gamma(
-    [thickness], [width], sim_freqs, mode='Ex')
-print(f'sim_gamma = {np.mean(sim_gamma)}')
-# sim_gamma = 10.5
-gamma_spline = interpolate.InterpolatedUnivariateSpline(
-    sim_freqs,
-    sim_gamma,
-    ext="extrapolate")
+# import ri_interpolator
+# sim_freqs = ri_interpolator.sim_freqs
+## -- incorporating numpy mode files from abijith --
+mode_file = 'from_abijith/jw_modes/JW_SiN_AirClad_800nmThickness_5000nmWidth_gamma_aeff.npy' 
+data = np.load(mode_file)
+
+# --- 1. Extract and Convert Data
+# Column 0: Wavelength (assumed microns from modesolver.py)
+# Column 1: n_eff
+# Column 2: gamma (1/W/m)
+# Column 3: A_eff (m^2)
+wvl_um = data[:, 0]
+n_eff_data = data[:, 1]
+gamma_data = data[:, 2] 
+
+# Convert to SI units for frequency mapping
+wvl_m = wvl_um * 1e-6
+freq_data = c / wvl_m
+
+# --- 2. Sort by Frequency 
+# Splines require the x-axis (frequency) to be strictly increasing.
+# Since wavelength increases, frequency decreases, so we must flip them.
+sort_idx = np.argsort(freq_data)
+freq_data = freq_data[sort_idx]
+n_eff_data = n_eff_data[sort_idx]
+gamma_data = gamma_data[sort_idx]
+
+# Splines require the x-axis (frequency) to be strictly increasing.
+# Since wavelength increases, frequency decreases, so we must flip them.
+sort_idx = np.argsort(freq_data)
+freq_data = freq_data[sort_idx]
+n_eff_data = n_eff_data[sort_idx]
+gamma_data = gamma_data[sort_idx]
+
+# --- 3. Create Splines
+# These will map the solver data onto your simulation's v_grid
 n_eff_spline = interpolate.InterpolatedUnivariateSpline(
-sim_freqs,
-sim_n_eff,
-ext="extrapolate",
-k=3)
+    freq_data, n_eff_data, k=3, ext="extrapolate")
 
-g3_v = pynlo.utility.chi3.gamma_to_g3(v_grid, gamma_spline(v_grid))
+gamma_spline = interpolate.InterpolatedUnivariateSpline(
+    freq_data, gamma_data, k=3, ext="extrapolate")
 
+# --- 4. Setup pynlo Mode
+# beta_v represents the propagation constant
 beta_v = pynlo.utility.chi1.n_to_beta(v_grid, n_eff_spline(v_grid))
-print(f'beta_v = {np.mean(beta_v)}')
-domega = np.mean(np.diff(v_grid))
-print("mean Δω:", domega)
-omega = 2 * np.pi * pulse.v_grid   # angular frequency [rad/s]
-print('mean omega:', np.mean(omega))
 
-omega = 2*np.pi * pulse.v_grid  # angular frequency [rad/s]
-
-# beta_w = pynlo.utility.chi1.n_to_beta(omega, n_eff_spline(omega))
-
-# g3_w = pynlo.utility.chi3.gamma_to_g3(omega, gamma_spline(omega))
-
-
-# # beta_v = np.zeros(len(v_grid))
-# print(np.average(beta_v))
-# print("LD =", T0**2 / abs(np.average(beta_v)))
-
+# g3_v represents the third-order nonlinear coupling
+g3_v = pynlo.utility.chi3.gamma_to_g3(v_grid, gamma_spline(v_grid))
 #---- Mode
 mode = pynlo.medium.Mode(v_grid, beta_v, alpha = None, g3=g3_v)
+# --- Verify Dispersion
 beta2 = mode.beta2
-print("β₂:", np.mean(beta2))
-print("LD =", T0**2 / abs(np.average(beta2)))
+print(f"Mean Beta2 : {np.mean(beta2):.3e} s^2/m")
 
 length = 0.01
 
@@ -151,7 +162,7 @@ p_t_dB = 10*np.log10(np.abs(a_t)**2)
 p_t_dB -= p_t_dB.max()
 ax1.plot(1e12*pulse.t_grid, np.abs(a_t[0])**2/np.max( np.abs(a_t[0])**2), color="b", label = 'Input')
 ax1.plot(1e12*pulse.t_grid, np.abs(a_t[-1])**2/np.max( np.abs(a_t[-1])**2), color="g", label = 'Output')
-ax1.plot(1e12*pulse.t_grid, np.abs(a_t[12])**2/np.max( np.abs(a_t[12])**2), color="r", label = 'Bubbles')
+# ax1.plot(1e12*pulse.t_grid, np.abs(a_t[12])**2/np.max( np.abs(a_t[12])**2), color="r", label = 'Bubbles')
 im = ax3.pcolormesh(1e12*pulse.t_grid, 1e3*z, p_t_dB,
                 vmin=-57.0, vmax=0, shading="auto", cmap = 'nipy_spectral')
 ax1.set_ylim(bottom=-0.1, top=1.1)
