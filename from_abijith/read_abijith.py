@@ -1,8 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-data = np.load('from_abijith/Airclad/SiN_airclad_800nm_thick_5000nm_width_neffs.npy')
-data_j = np.load('from_abijith/jw_modes/JW_SiN_AirClad_800nmThickness_5000nmWidth_gamma_aeff.npy')
+data = np.load('from_abijith/Effective_Index_Data_Oxide_Cladded/2025_SiN_O2Clad_800nmThickness_5000nmWidth.npy')
+data_j = np.load('from_abijith/jw_modes/JW_SiN_O2Clad_800nmThickness_5000nmWidth_gamma_aeff.npy')
 print(data.shape)
 print(data_j.shape)
 data_col = data[:,1]

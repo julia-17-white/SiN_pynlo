@@ -60,7 +60,7 @@ width = 1200e-9 # 1300, 1800
 # import ri_interpolator
 # sim_freqs = ri_interpolator.sim_freqs
 ## -- incorporating numpy mode files from abijith --
-mode_file = 'from_abijith/jw_modes/JW_SiN_AirClad_800nmThickness_5000nmWidth_gamma_aeff.npy' 
+mode_file = 'from_abijith/jw_modes/JW_SiN_O2Clad_800nmThickness_2200nmWidth_gamma_aeff.npy' 
 data = np.load(mode_file)
 
 # --- 1. Extract and Convert Data

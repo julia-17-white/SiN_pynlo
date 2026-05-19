@@ -51,18 +51,18 @@ def modeparams(Ex,solver_x,solver_y,wl,neff):
 
 
 c = speed_of_light
-ldas = np.linspace(0.4,2.4,50)
+ldas = np.linspace(0.5,3.02,64)
 
 #ldas = np.array([1.55])
 
 #ldas = np.linspace(1., 2., 20)
 #ldas = np.array([])
-x = np.linspace(-6, 6, 400)
-y = np.linspace(-6, 6, 400)
+x = np.linspace(-4, 4, 400)
+y = np.linspace(-4, 4, 400)
 
 neigs = 1
 tol = 1e-4
-boundary = '000S'
+boundary = '0000'
 
 # widths = np.linspace(0.8,5.,43)
 widths = np.array([5.0])
@@ -84,7 +84,7 @@ for j in range(len(widths)):
         return np.where((np.abs(xx.T) <= width/2.0) *
                       (np.abs(yy.T) <= height/2.0),
                       sinIndex(wl)**2,
-                      1.0) # sio2Index(wl)**2
+                      sio2Index(wl)**2)
     
     
     for k in range(len(ldas)):
@@ -103,7 +103,7 @@ for j in range(len(widths)):
         print(wl, neffs[k], gammas[k], Aeffs[k])
         print('')
     
-    np.save('from_abijith/jw_modes/JW_SiN_AirClad_800nmThickness_' + str(int(width*1000)) + 'nmWidth_gamma_aeff.npy',np.column_stack([ldas,neffs,gammas,Aeffs]))
+    np.save('from_abijith/jw_modes/JW_SiN_O2Clad_800nmThickness_' + str(int(width*1000)) + 'nmWidth_gamma_aeff.npy',np.column_stack([ldas,neffs,gammas,Aeffs]))
 
 
 dlda = np.diff(ldas)[0]
