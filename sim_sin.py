@@ -77,6 +77,12 @@ k=3)
 g3_v = pynlo.utility.chi3.gamma_to_g3(v_grid, gamma_spline(v_grid))
 
 beta_v = pynlo.utility.chi1.n_to_beta(v_grid, n_eff_spline(v_grid))
+
+dt = pulse.dt
+r_weights = [0.05, 13.5e-15, 45.0e-15]  # Approximate SiN Raman response
+rv_grid, r3 = pynlo.utility.chi3.raman(n=n_points, dt=dt, r_weights=r_weights, b_weights=None, analytic=True) 
+
+print("Raman grid generated. Frequency points:", len(r3))
 print(f'beta_v = {np.mean(beta_v)}')
 domega = np.mean(np.diff(v_grid))
 print("mean Δω:", domega)
@@ -95,9 +101,9 @@ omega = 2*np.pi * pulse.v_grid  # angular frequency [rad/s]
 # print("LD =", T0**2 / abs(np.average(beta_v)))
 
 #---- Mode
-mode = pynlo.medium.Mode(v_grid, beta_v, alpha = None, g3=g3_v)
+mode = pynlo.medium.Mode(v_grid, beta_v, alpha = None, g3=g3_v, rv_grid=rv_grid, r3=r3)
 beta2 = mode.beta2
-print("β₂:", beta2)
+print("Mean β₂:", np.mean(beta2))
 print("LD =", T0**2 / abs(np.average(beta2)))
 
 length = 0.01
@@ -168,43 +174,43 @@ plt.show()
 
 
 #%% Adding in Julia's Plots:
-t = pulse.t_grid
-I_out = np.abs(a_t[-1])**2
+# t = pulse.t_grid
+# I_out = np.abs(a_t[-1])**2
 
-plt.plot(t*1e12, I_out)
-plt.axhline(0, color='k')
-plt.xlabel("Time (ps)")
-plt.ylabel("Intensity")
-plt.title("Output temporal profile")
-plt.show()
+# plt.plot(t*1e12, I_out)
+# plt.axhline(0, color='k')
+# plt.xlabel("Time (ps)")
+# plt.ylabel("Intensity")
+# plt.title("Output temporal profile")
+# plt.show()
 
-margin = 0.1 * np.ptp(pulse.t_grid)
-edge_mask = np.abs(pulse.t_grid) > (np.ptp(pulse.t_grid)/2 - margin)
+# margin = 0.1 * np.ptp(pulse.t_grid)
+# edge_mask = np.abs(pulse.t_grid) > (np.ptp(pulse.t_grid)/2 - margin)
 
-print("Max edge intensity:",
-      np.max(I_out[edge_mask]) / np.max(I_out))
+# print("Max edge intensity:",
+#       np.max(I_out[edge_mask]) / np.max(I_out))
 
-# print(f'length of the array = {len(a_t)}')
+# # print(f'length of the array = {len(a_t)}')
 
-# Temporal field
-a_t = pulse.a_t
-t = pulse.t_grid * 1e12  # ps
+# # Temporal field
+# a_t = pulse.a_t
+# t = pulse.t_grid * 1e12  # ps
 
-I_t = np.abs(a_t)**2
-phase_t = np.unwrap(np.angle(a_t))
+# I_t = np.abs(a_t)**2
+# phase_t = np.unwrap(np.angle(a_t))
 
-# Mask low-intensity regions (e.g. below -40 dB)
-mask_t = I_t > I_t.max() * 1e-4
+# # Mask low-intensity regions (e.g. below -40 dB)
+# mask_t = I_t > I_t.max() * 1e-4
 
-# Spectral field
-dt = pulse.t_grid[1] - pulse.t_grid[0]
+# # Spectral field
+# dt = pulse.t_grid[1] - pulse.t_grid[0]
 
-# FFT with correct centering
-a_w = np.fft.fftshift(np.fft.fft(np.fft.ifftshift(a_t))) * dt
-v = pulse.v_grid * 1e-12  # THz
+# # FFT with correct centering
+# a_w = np.fft.fftshift(np.fft.fft(np.fft.ifftshift(a_t))) * dt
+# v = pulse.v_grid * 1e-12  # THz
 
-I_w = np.abs(a_w)**2
-phase_w = np.unwrap(np.angle(a_w))
+# I_w = np.abs(a_w)**2
+# phase_w = np.unwrap(np.angle(a_w))
 
 # Mask weak spectral components
 # mask_w = I_w > I_w.max() * 1e-4
