@@ -39,8 +39,8 @@ t_fwhm = 210e-15
 T0 = t_fwhm / 1.763
 P0_expected = e_p / T0
 print("Expected P0 (W):", P0_expected)
-phi_NL = 1.3 * P0_expected * 0.01
-print("Nonlinear phase shift (rad):", phi_NL)
+# phi_NL = 1.3 * P0_expected * 0.01
+# print("Nonlinear phase shift (rad):", phi_NL)
 
 
 #JULIA ADDED:
@@ -121,57 +121,153 @@ new_pulse, z, a_t, a_v = sim.simulate(length, dz=dz, local_error=local_error, n_
 # %% Plot Results
 
 #from matplotlib import colormaps as cm
-"""
-For comparison with Dudley, we plot the evolution in the time and wavelength
-domains. For accurate representation of the density, plotting over wavelength
-requires converting the power from a per Hz basis to a per m basis. This is
-accomplished by multiplying the frequency domain power spectral density by the
-ratio of the frequency and wavelength differentials. The power spectral density
-is then converted to decibel (dB) scale to increase the visible dynamic range.
 
-"""
-fig = plt.figure("Simulation Results", clear=True, figsize = (12,8.5))
-fig.subplots_adjust(hspace=0.4)
-ax0 = plt.subplot2grid((3,2), (0, 0), rowspan=1)
-ax1 = plt.subplot2grid((3,2), (0, 1), rowspan=1)
-ax2 = plt.subplot2grid((3,2), (1, 0), rowspan=2, sharex=ax0)
-ax3 = plt.subplot2grid((3,2), (1, 1), rowspan=2, sharex=ax1)
+def nice_plot(a_v):
+    """
+    For comparison with Dudley, we plot the evolution in the time and wavelength
+    domains. For accurate representation of the density, plotting over wavelength
+    requires converting the power from a per Hz basis to a per m basis. This is
+    accomplished by multiplying the frequency domain power spectral density by the
+    ratio of the frequency and wavelength differentials. The power spectral density
+    is then converted to decibel (dB) scale to increase the visible dynamic range.
 
-p_l_dB = 10*np.log10(np.abs(a_v)**2 * sim.dv_dl)
-p_l_dB -= p_l_dB.max()
-# ax0.plot(1e9*c/pulse.v_grid, p_l_dB[0], color="b")
-# ax0.plot(1e9*c/pulse.v_grid, p_l_dB[-1], color="g")
-# ax2.pcolormesh(1e9*c/pulse.v_grid, 1e3*z, p_l_dB,
-#                 vmin=-40.0, vmax=0, shading="auto")
-ax0.plot(1e-12*pulse.v_grid, p_l_dB[0], color="b", label = 'Input')
-ax0.plot(1e-12*pulse.v_grid, p_l_dB[-1], color="g", label = 'Output')
-im = ax2.pcolormesh(1e-12*pulse.v_grid, 1e3*z, p_l_dB,
-                vmin=-52.0, vmax=0, shading="auto", cmap = 'nipy_spectral')
-ax0.set_ylim(bottom=-90, top=5)
-# ax0.set_xlim(left = 50, right=470)
-ax0.set_xlim(left = 150, right=300)
-ax0.legend()
-ax2.set_xlabel('Frequency (THz)')
+    """
+    fig = plt.figure("Simulation Results", clear=True, figsize = (12,8.5))
+    fig.subplots_adjust(hspace=0.4)
+    ax0 = plt.subplot2grid((3,2), (0, 0), rowspan=1)
+    ax1 = plt.subplot2grid((3,2), (0, 1), rowspan=1)
+    ax2 = plt.subplot2grid((3,2), (1, 0), rowspan=2, sharex=ax0)
+    ax3 = plt.subplot2grid((3,2), (1, 1), rowspan=2, sharex=ax1)
 
-p_t_dB = 10*np.log10(np.abs(a_t)**2)
-p_t_dB -= p_t_dB.max()
-ax1.plot(1e12*pulse.t_grid, np.abs(a_t[0])**2/np.max( np.abs(a_t[0])**2), color="b", label = 'Input')
-ax1.plot(1e12*pulse.t_grid, np.abs(a_t[-1])**2/np.max( np.abs(a_t[-1])**2), color="g", label = 'Output')
-ax1.plot(1e12*pulse.t_grid, np.abs(a_t[12])**2/np.max( np.abs(a_t[12])**2), color="r", label = 'Bubbles')
-im = ax3.pcolormesh(1e12*pulse.t_grid, 1e3*z, p_t_dB,
-                vmin=-57.0, vmax=0, shading="auto", cmap = 'nipy_spectral')
-ax1.set_ylim(bottom=-0.1, top=1.1)
-ax1.set_xlim(left = -0.25, right=0.25) #0.6
-# ax1.set_xlim(left=-2.0, right=2.0)
-ax1.legend()
-ax3.set_xlabel('Time (ps)')
-cb_ax = fig.add_axes([.91,.125,.02,.454])
-fig.colorbar(im,orientation='vertical',cax=cb_ax)
+    p_l_dB = 10*np.log10(np.abs(a_v)**2 * sim.dv_dl)
+    p_l_dB -= p_l_dB.max()
+    # ax0.plot(1e9*c/pulse.v_grid, p_l_dB[0], color="b")
+    # ax0.plot(1e9*c/pulse.v_grid, p_l_dB[-1], color="g")
+    # ax2.pcolormesh(1e9*c/pulse.v_grid, 1e3*z, p_l_dB,
+    #                 vmin=-40.0, vmax=0, shading="auto")
+    ax0.plot(1e-12*pulse.v_grid, p_l_dB[0], color="b", label = 'Input')
+    ax0.plot(1e-12*pulse.v_grid, p_l_dB[-1], color="g", label = 'Output')
+    im = ax2.pcolormesh(1e-12*pulse.v_grid, 1e3*z, p_l_dB,
+                    vmin=-52.0, vmax=0, shading="auto", cmap = 'nipy_spectral')
+    ax0.set_ylim(bottom=-90, top=5)
+    # ax0.set_xlim(left = 50, right=470)
+    ax0.set_xlim(left = 150, right=300)
+    ax0.legend()
+    ax2.set_xlabel('Frequency (THz)')
 
-ax0.set_ylabel('Intensity (dB)')
-ax2.set_ylabel('Length (mm)', labelpad = 20)
+    p_t_dB = 10*np.log10(np.abs(a_t)**2)
+    p_t_dB -= p_t_dB.max()
+    ax1.plot(1e12*pulse.t_grid, np.abs(a_t[0])**2/np.max( np.abs(a_t[0])**2), color="b", label = 'Input')
+    ax1.plot(1e12*pulse.t_grid, np.abs(a_t[-1])**2/np.max( np.abs(a_t[-1])**2), color="g", label = 'Output')
+    ax1.plot(1e12*pulse.t_grid, np.abs(a_t[12])**2/np.max( np.abs(a_t[12])**2), color="r", label = 'Bubbles')
+    im = ax3.pcolormesh(1e12*pulse.t_grid, 1e3*z, p_t_dB,
+                    vmin=-57.0, vmax=0, shading="auto", cmap = 'nipy_spectral')
+    ax1.set_ylim(bottom=-0.1, top=1.1)
+    ax1.set_xlim(left = -0.25, right=0.25) #0.6
+    # ax1.set_xlim(left=-2.0, right=2.0)
+    ax1.legend()
+    ax3.set_xlabel('Time (ps)')
+    cb_ax = fig.add_axes([.91,.125,.02,.454])
+    fig.colorbar(im,orientation='vertical',cax=cb_ax)
+
+    ax0.set_ylabel('Intensity (dB)')
+    ax2.set_ylabel('Length (mm)', labelpad = 20)
+    plt.show()
+
+
+nice_plot(a_v)
+
+#%% Calculating the Nonlinear phase shift
+
+# Calculate the raw phase difference
+phase_input = np.unwrap(np.angle(a_t[0]))
+phase_output = np.unwrap(np.angle(a_t[-1]))
+phase_shift_total = phase_output - phase_input
+
+# Create a mask to ONLY look where the pulse has real power
+# This ignores the chaotic numerical noise at the empty edges
+intensity_input = np.abs(a_t[0])**2
+mask = intensity_input > (np.max(intensity_input) * 1e-3) # Top 30 dB of the pulse
+
+# Fit and remove the linear frequency shift ONLY within the pulse window
+t_ps = pulse.t_grid * 1e12
+p = np.polyfit(t_ps[mask], phase_shift_total[mask], 1)
+phase_pure_nonlinear = phase_shift_total - np.polyval(p, t_ps)
+
+# Plot the results focusing only on the physical pulse region
+fig, ax1 = plt.subplots(figsize=(9, 6))
+
+color = 'tab:blue'
+ax1.set_xlabel('Time (ps)')
+ax1.set_ylabel('Normalized Intensity', color=color)
+ax1.plot(t_ps, intensity_input / np.max(intensity_input), color=color, linewidth=2)
+ax1.tick_params(axis='y', labelcolor=color)
+
+ax2 = ax1.twinx()  
+color = 'tab:red'
+ax2.set_ylabel('True Nonlinear Phase Shift (rad)', color=color)
+# Only plot the phase where the pulse is active so it stays clean
+ax2.plot(t_ps[mask], phase_pure_nonlinear[mask], color=color, linestyle='--', linewidth=2)
+ax2.tick_params(axis='y', labelcolor=color)
+
+ax1.set_xlim(-0.4, 0.4)
+plt.title("Pulse Profile vs. True Nonlinear Phase Shift (Noise Masked)")
+fig.tight_layout()
 plt.show()
 
+# Print the actual peak value
+peak_idx = np.argmax(intensity_input)
+print(f"True nonlinear phase shift at the peak: {phase_pure_nonlinear[peak_idx]:.2f} rad")
+
+#%% Creating a second pulse and interfering the two pulses
+
+# and a_v_aux is the newly created auxiliary pulse object
+# I'll create it here
+
+e_p_aux = e_p/100
+pulse_aux = pynlo.light.Pulse.Sech(n_points, v_min, v_max, v0, e_p_aux, t_fwhm)
+a_v_aux = pulse_aux.a_v
+
+# Define your tuning parameters
+tau = 100e-15      # Time delay in seconds (e.g., 200 fs)
+theta = 1  # Relative global phase shift in radians
+
+# Apply the delay and phase shift to the auxiliary pulse
+# The time delay tau creates a phase shift of 2*pi*v*tau across the spectrum
+phase_ramp = np.exp(1j * 2 * np.pi * pulse.v_grid * tau)
+global_phase = np.exp(1j * theta)
+
+a_v_aux_shifted = a_v_aux * global_phase * phase_ramp
+
+# Interfere them (simply add the complex fields)
+a_v_interfered = a_v[-1] + a_v_aux_shifted
+
+# Calculate spectral intensities for plotting
+I_main_out = np.abs(a_v[-1])**2
+I_aux = np.abs(a_v_aux_shifted)**2
+I_interfered = np.abs(a_v_interfered)**2
+
+# %% Plot the Interfered Spectrum
+
+plt.figure(figsize=(10, 6))
+freq_thz = pulse.v_grid * 1e-12
+
+# Convert to dB scale for scannability
+def to_db(x): 
+    return 10 * np.log10(x / np.max(I_interfered))
+
+plt.plot(freq_thz, to_db(I_interfered), color='black', linewidth=2, label='Interfered Spectrum')
+plt.plot(freq_thz, to_db(I_main_out), color='tab:green', linestyle='--', alpha=0.7, label='SQZ')
+plt.plot(freq_thz, to_db(I_aux), color='tab:orange', linestyle=':', alpha=0.7, label=rf'AUX, $\theta = ${theta}$\pi$')
+
+plt.xlabel('Frequency (THz)')
+plt.ylabel('Relative Intensity (dB)')
+plt.title('Spectral Interference (Homodyne Mixing Profile)')
+plt.xlim(150, 250) # Focus on your pulse bandwidth
+plt.ylim(-40, 5)
+plt.grid(True)
+plt.legend()
+plt.show()
 
 #%% Adding in Julia's Plots:
 # t = pulse.t_grid
