@@ -179,95 +179,117 @@ nice_plot(a_v)
 
 #%% Calculating the Nonlinear phase shift
 
-# Calculate the raw phase difference
-phase_input = np.unwrap(np.angle(a_t[0]))
-phase_output = np.unwrap(np.angle(a_t[-1]))
-phase_shift_total = phase_output - phase_input
+def nonlin_phas_shift(a_t):
+    '''
+    Method to calculate the nonlinear phase shift that occurs in the waveguide.
+    Params:
+        a_t: the electromagnetic spectrum as a function of time.
+    Returns:
+        None: it plots the nonlinear phase shift and prints a value.
+    '''
 
-# Create a mask to ONLY look where the pulse has real power
-# This ignores the chaotic numerical noise at the empty edges
-intensity_input = np.abs(a_t[0])**2
-mask = intensity_input > (np.max(intensity_input) * 1e-3) # Top 30 dB of the pulse
+    # Calculate the raw phase difference
+    phase_input = np.unwrap(np.angle(a_t[0]))
+    phase_output = np.unwrap(np.angle(a_t[-1]))
+    phase_shift_total = phase_output - phase_input
 
-# Fit and remove the linear frequency shift ONLY within the pulse window
-t_ps = pulse.t_grid * 1e12
-p = np.polyfit(t_ps[mask], phase_shift_total[mask], 1)
-phase_pure_nonlinear = phase_shift_total - np.polyval(p, t_ps)
+    # Create a mask to ONLY look where the pulse has real power
+    # This ignores the chaotic numerical noise at the empty edges
+    intensity_input = np.abs(a_t[0])**2
+    mask = intensity_input > (np.max(intensity_input) * 1e-3) # Top 30 dB of the pulse
 
-# Plot the results focusing only on the physical pulse region
-fig, ax1 = plt.subplots(figsize=(9, 6))
+    # Fit and remove the linear frequency shift ONLY within the pulse window
+    t_ps = pulse.t_grid * 1e12
+    p = np.polyfit(t_ps[mask], phase_shift_total[mask], 1)
+    phase_pure_nonlinear = phase_shift_total - np.polyval(p, t_ps)
 
-color = 'tab:blue'
-ax1.set_xlabel('Time (ps)')
-ax1.set_ylabel('Normalized Intensity', color=color)
-ax1.plot(t_ps, intensity_input / np.max(intensity_input), color=color, linewidth=2)
-ax1.tick_params(axis='y', labelcolor=color)
+    # Plot the results focusing only on the physical pulse region
+    fig, ax1 = plt.subplots(figsize=(9, 6))
 
-ax2 = ax1.twinx()  
-color = 'tab:red'
-ax2.set_ylabel('True Nonlinear Phase Shift (rad)', color=color)
-# Only plot the phase where the pulse is active so it stays clean
-ax2.plot(t_ps[mask], phase_pure_nonlinear[mask], color=color, linestyle='--', linewidth=2)
-ax2.tick_params(axis='y', labelcolor=color)
+    color = 'tab:blue'
+    ax1.set_xlabel('Time (ps)')
+    ax1.set_ylabel('Normalized Intensity', color=color)
+    ax1.plot(t_ps, intensity_input / np.max(intensity_input), color=color, linewidth=2)
+    ax1.tick_params(axis='y', labelcolor=color)
 
-ax1.set_xlim(-0.4, 0.4)
-plt.title("Pulse Profile vs. True Nonlinear Phase Shift (Noise Masked)")
-fig.tight_layout()
-plt.show()
+    ax2 = ax1.twinx()  
+    color = 'tab:red'
+    ax2.set_ylabel('True Nonlinear Phase Shift (rad)', color=color)
+    # Only plot the phase where the pulse is active so it stays clean
+    ax2.plot(t_ps[mask], phase_pure_nonlinear[mask], color=color, linestyle='--', linewidth=2)
+    ax2.tick_params(axis='y', labelcolor=color)
 
-# Print the actual peak value
-peak_idx = np.argmax(intensity_input)
-print(f"True nonlinear phase shift at the peak: {phase_pure_nonlinear[peak_idx]:.2f} rad")
+    ax1.set_xlim(-0.4, 0.4)
+    plt.title("Pulse Profile vs. True Nonlinear Phase Shift (Noise Masked)")
+    fig.tight_layout()
+    plt.show()
+
+    # Print the actual peak value
+    peak_idx = np.argmax(intensity_input)
+    print(f"True nonlinear phase shift at the peak: {phase_pure_nonlinear[peak_idx]:.2f} rad")
+
+
+nonlin_phas_shift(a_t)
 
 #%% Creating a second pulse and interfering the two pulses
 
-# and a_v_aux is the newly created auxiliary pulse object
-# I'll create it here
+def pulse_interference(a_v):
+    '''
+    Create a new un-propagated LO pulse and interfere it with the pulse that has propagated through the waveguide 
+    to simulate homodyne detection with a single detector.
+    Params:
+        a_v: the electromagnetic spectrum defined in frequency.
+    Returns:
+        None: Plots the interference.
+    '''
 
-e_p_aux = e_p/100
-pulse_aux = pynlo.light.Pulse.Sech(n_points, v_min, v_max, v0, e_p_aux, t_fwhm)
-a_v_aux = pulse_aux.a_v
+    # and a_v_aux is the newly created auxiliary pulse object
+    # I'll create it here
 
-# Define your tuning parameters
-tau = 100e-15      # Time delay in seconds (e.g., 200 fs)
-theta = 1  # Relative global phase shift in radians
+    e_p_aux = e_p*100
+    pulse_aux = pynlo.light.Pulse.Sech(n_points, v_min, v_max, v0, e_p_aux, t_fwhm)
+    a_v_aux = pulse_aux.a_v
 
-# Apply the delay and phase shift to the auxiliary pulse
-# The time delay tau creates a phase shift of 2*pi*v*tau across the spectrum
-phase_ramp = np.exp(1j * 2 * np.pi * pulse.v_grid * tau)
-global_phase = np.exp(1j * theta)
+    # Define your tuning parameters
+    tau = 150e-15      # Time delay in seconds (e.g., 200 fs)
+    theta = 1  # Relative global phase shift in radians
 
-a_v_aux_shifted = a_v_aux * global_phase * phase_ramp
+    # Apply the delay and phase shift to the auxiliary pulse
+    # The time delay tau creates a phase shift of 2*pi*v*tau across the spectrum
+    phase_ramp = np.exp(1j * 2 * np.pi * pulse.v_grid * tau)
+    global_phase = np.exp(1j * theta)
 
-# Interfere them (simply add the complex fields)
-a_v_interfered = a_v[-1] + a_v_aux_shifted
+    a_v_aux_shifted = a_v_aux * global_phase * phase_ramp
 
-# Calculate spectral intensities for plotting
-I_main_out = np.abs(a_v[-1])**2
-I_aux = np.abs(a_v_aux_shifted)**2
-I_interfered = np.abs(a_v_interfered)**2
+    # Interfere them (simply add the complex fields)
+    a_v_interfered = a_v[-1] + a_v_aux_shifted
 
-# %% Plot the Interfered Spectrum
+    # Calculate spectral intensities for plotting
+    I_main_out = np.abs(a_v[-1])**2
+    I_aux = np.abs(a_v_aux_shifted)**2
+    I_interfered = np.abs(a_v_interfered)**2
 
-plt.figure(figsize=(10, 6))
-freq_thz = pulse.v_grid * 1e-12
+    plt.figure(figsize=(10, 6))
+    freq_thz = pulse.v_grid * 1e-12
 
-# Convert to dB scale for scannability
-def to_db(x): 
-    return 10 * np.log10(x / np.max(I_interfered))
+    # Convert to dB scale for scannability
+    def to_db(x): 
+        return 10 * np.log10(x / np.max(I_interfered))
 
-plt.plot(freq_thz, to_db(I_interfered), color='black', linewidth=2, label='Interfered Spectrum')
-plt.plot(freq_thz, to_db(I_main_out), color='tab:green', linestyle='--', alpha=0.7, label='SQZ')
-plt.plot(freq_thz, to_db(I_aux), color='tab:orange', linestyle=':', alpha=0.7, label=rf'AUX, $\theta = ${theta}$\pi$')
+    plt.plot(freq_thz, to_db(I_interfered), color='black', linewidth=2, label='Interfered Spectrum')
+    plt.plot(freq_thz, to_db(I_main_out), color='tab:green', linestyle='--', alpha=0.7, label='SQZ')
+    plt.plot(freq_thz, to_db(I_aux), color='tab:orange', linestyle=':', alpha=0.7, label=rf'AUX, $\theta = ${theta}$\pi$')
 
-plt.xlabel('Frequency (THz)')
-plt.ylabel('Relative Intensity (dB)')
-plt.title('Spectral Interference (Homodyne Mixing Profile)')
-plt.xlim(150, 250) # Focus on your pulse bandwidth
-plt.ylim(-40, 5)
-plt.grid(True)
-plt.legend()
-plt.show()
+    plt.xlabel('Frequency (THz)')
+    plt.ylabel('Relative Intensity (dB)')
+    plt.title('Spectral Interference (Homodyne Mixing Profile)')
+    plt.xlim(150, 250) # Focus on your pulse bandwidth
+    plt.ylim(-40, 5)
+    plt.grid(True)
+    plt.legend()
+    plt.show()
+
+pulse_interference(a_v)
 
 #%% Adding in Julia's Plots:
 # t = pulse.t_grid
