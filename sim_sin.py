@@ -2,7 +2,7 @@
 """
 Created on Tue Jul  9 14:10:14 2024
 
-@author: Diddams
+@author: Pooja Sekhar and Julia White
 """
 
 # %% Imports
@@ -26,103 +26,115 @@ import pynlo
 # from pynlo.medium import RamanResponse
 # from pynlo.utility import fft
 
-# %% Pulse
 
-v_min = c/4000e-9
-v_max = c/400e-9
-v0 = c/1560e-9
-e_p = 50e-12 
-# e_p = 3.5e-11
-t_fwhm = 210e-15
-# t_fwhm = 50e-15
+def create_pulse_simulate():
+    '''
+    Method that creates the pulse parameters and waveguide parameters (used in making the mode). It then runs the simulation
+    of the pulse propagating through the waveguide.
+    Params:
+        None
+    Returns:
+        The pulses's properties (TO DO: DEFINE THESE)
+    '''
 
-T0 = t_fwhm / 1.763
-P0_expected = e_p / T0
-print("Expected P0 (W):", P0_expected)
-# phi_NL = 1.3 * P0_expected * 0.01
-# print("Nonlinear phase shift (rad):", phi_NL)
+    # Pulse
+    v_min = c/4000e-9
+    v_max = c/400e-9
+    v0 = c/1560e-9
+    e_p = 50e-12 
+    # e_p = 3.5e-11
+    t_fwhm = 210e-15
+    # t_fwhm = 50e-15
+
+    T0 = t_fwhm / 1.763
+    P0_expected = e_p / T0
+    print("Expected P0 (W):", P0_expected)
+    # phi_NL = 1.3 * P0_expected * 0.01
+    # print("Nonlinear phase shift (rad):", phi_NL)
 
 
-#JULIA ADDED:
-# dv = 300e12
-# v_min = v0 - dv
-# v_max = v0 + dv
+    #JULIA ADDED:
+    # dv = 300e12
+    # v_min = v0 - dv
+    # v_max = v0 + dv
 
-n_points = 2**13 # 20 for sidebands
+    n_points = 2**13 # 20 for sidebands
 
-pulse = pynlo.light.Pulse.Sech(n_points, v_min, v_max, v0, e_p, t_fwhm)
-print("Frq Res: {:.3g} GHz".format(pulse.dv * 1e-9))
-v_grid = pulse.v_grid
+    pulse = pynlo.light.Pulse.Sech(n_points, v_min, v_max, v0, e_p, t_fwhm)
+    print("Frq Res: {:.3g} GHz".format(pulse.dv * 1e-9))
+    v_grid = pulse.v_grid
 
-#%% SiN waveguide
-thickness = 600e-9 # 420, 350
-width = 1200e-9 # 1300, 1800
-import ri_interpolator
-sim_freqs = ri_interpolator.sim_freqs
-sim_oversample = np.linspace(sim_freqs.min(), sim_freqs.max(), sim_freqs.size*100)
-sim_n_eff, sim_gamma, sim_a_eff = ri_interpolator.refractive_index_and_gamma(
-    [thickness], [width], sim_freqs, mode='Ex')
-print(f'sim_gamma = {np.mean(sim_gamma)}')
-# sim_gamma = 10.5
-gamma_spline = interpolate.InterpolatedUnivariateSpline(
+    # SiN waveguide
+    thickness = 600e-9 # 420, 350
+    width = 1200e-9 # 1300, 1800
+    import ri_interpolator
+    sim_freqs = ri_interpolator.sim_freqs
+    sim_oversample = np.linspace(sim_freqs.min(), sim_freqs.max(), sim_freqs.size*100)
+    sim_n_eff, sim_gamma, sim_a_eff = ri_interpolator.refractive_index_and_gamma(
+        [thickness], [width], sim_freqs, mode='Ex')
+    print(f'sim_gamma = {np.mean(sim_gamma)}')
+    # sim_gamma = 10.5
+    gamma_spline = interpolate.InterpolatedUnivariateSpline(
+        sim_freqs,
+        sim_gamma,
+        ext="extrapolate")
+    n_eff_spline = interpolate.InterpolatedUnivariateSpline(
     sim_freqs,
-    sim_gamma,
-    ext="extrapolate")
-n_eff_spline = interpolate.InterpolatedUnivariateSpline(
-sim_freqs,
-sim_n_eff,
-ext="extrapolate",
-k=3)
+    sim_n_eff,
+    ext="extrapolate",
+    k=3)
 
-g3_v = pynlo.utility.chi3.gamma_to_g3(v_grid, gamma_spline(v_grid))
+    g3_v = pynlo.utility.chi3.gamma_to_g3(v_grid, gamma_spline(v_grid))
 
-beta_v = pynlo.utility.chi1.n_to_beta(v_grid, n_eff_spline(v_grid))
+    beta_v = pynlo.utility.chi1.n_to_beta(v_grid, n_eff_spline(v_grid))
 
-dt = pulse.dt
-r_weights = [0.05, 13.5e-15, 45.0e-15]  # Approximate SiN Raman response
-rv_grid, r3 = pynlo.utility.chi3.raman(n=n_points, dt=dt, r_weights=r_weights, b_weights=None, analytic=True) 
+    dt = pulse.dt
+    r_weights = [0.05, 13.5e-15, 45.0e-15]  # Approximate SiN Raman response
+    rv_grid, r3 = pynlo.utility.chi3.raman(n=n_points, dt=dt, r_weights=r_weights, b_weights=None, analytic=True) 
 
-print("Raman grid generated. Frequency points:", len(r3))
-print(f'beta_v = {np.mean(beta_v)}')
-domega = np.mean(np.diff(v_grid))
-print("mean Δω:", domega)
-omega = 2 * np.pi * pulse.v_grid   # angular frequency [rad/s]
-print('mean omega:', np.mean(omega))
+    print("Raman grid generated. Frequency points:", len(r3))
+    print(f'beta_v = {np.mean(beta_v)}')
+    domega = np.mean(np.diff(v_grid))
+    print("mean Δω:", domega)
+    omega = 2 * np.pi * pulse.v_grid   # angular frequency [rad/s]
+    print('mean omega:', np.mean(omega))
 
-omega = 2*np.pi * pulse.v_grid  # angular frequency [rad/s]
+    omega = 2*np.pi * pulse.v_grid  # angular frequency [rad/s]
 
-# beta_w = pynlo.utility.chi1.n_to_beta(omega, n_eff_spline(omega))
+    # beta_w = pynlo.utility.chi1.n_to_beta(omega, n_eff_spline(omega))
 
-# g3_w = pynlo.utility.chi3.gamma_to_g3(omega, gamma_spline(omega))
+    # g3_w = pynlo.utility.chi3.gamma_to_g3(omega, gamma_spline(omega))
 
 
-# # beta_v = np.zeros(len(v_grid))
-# print(np.average(beta_v))
-# print("LD =", T0**2 / abs(np.average(beta_v)))
+    # # beta_v = np.zeros(len(v_grid))
+    # print(np.average(beta_v))
+    # print("LD =", T0**2 / abs(np.average(beta_v)))
 
-#---- Mode
-mode = pynlo.medium.Mode(v_grid, beta_v, alpha = None, g3=g3_v, rv_grid=rv_grid, r3=r3)
-beta2 = mode.beta2
-print("Mean β₂:", np.mean(beta2))
-print("LD =", T0**2 / abs(np.average(beta2)))
+    #---- Mode
+    mode = pynlo.medium.Mode(v_grid, beta_v, alpha = None, g3=g3_v, rv_grid=rv_grid, r3=r3)
+    beta2 = mode.beta2
+    print("Mean β₂:", np.mean(beta2))
+    print("LD =", T0**2 / abs(np.average(beta2)))
 
-length = 0.01
+    length = 0.01
 
-#%%
-#---- Run Sim
-sim = pynlo.model.NLSE(pulse, mode) # NLSE
-#---- Estimate step size
-local_error = 1e-6
-dz = sim.estimate_step_size(local_error=local_error)
-# dz = length / 2000   # 2000 steps over 5 mm → 2.5 µm steps #JULIA REDEFINED THIS
+    #
+    #---- Run Sim
+    sim = pynlo.model.NLSE(pulse, mode) # NLSE
+    #---- Estimate step size
+    local_error = 1e-6
+    dz = sim.estimate_step_size(local_error=local_error)
+    # dz = length / 2000   # 2000 steps over 5 mm → 2.5 µm steps #JULIA REDEFINED THIS
 
-new_pulse, z, a_t, a_v = sim.simulate(length, dz=dz, local_error=local_error, n_records=100, plot="frq")
+    new_pulse, z, a_t, a_v = sim.simulate(length, dz=dz, local_error=local_error, n_records=100, plot="frq")
+
+    return pulse, new_pulse, z, a_t, a_v, sim
 
 # %% Plot Results
 
 #from matplotlib import colormaps as cm
 
-def nice_plot(a_v):
+def nice_plot(a_v, sim, pulse):
     """
     For comparison with Dudley, we plot the evolution in the time and wavelength
     domains. For accurate representation of the density, plotting over wavelength
@@ -174,12 +186,7 @@ def nice_plot(a_v):
     ax2.set_ylabel('Length (mm)', labelpad = 20)
     plt.show()
 
-
-nice_plot(a_v)
-
-#%% Calculating the Nonlinear phase shift
-
-def nonlin_phas_shift(a_t):
+def nonlin_phas_shift(a_t, pulse):
     '''
     Method to calculate the nonlinear phase shift that occurs in the waveguide.
     Params:
@@ -229,11 +236,9 @@ def nonlin_phas_shift(a_t):
     print(f"True nonlinear phase shift at the peak: {phase_pure_nonlinear[peak_idx]:.2f} rad")
 
 
-nonlin_phas_shift(a_t)
-
 #%% Creating a second pulse and interfering the two pulses
 
-def pulse_interference(a_v):
+def pulse_interference(a_v, pulse):
     '''
     Create a new un-propagated LO pulse and interfere it with the pulse that has propagated through the waveguide 
     to simulate homodyne detection with a single detector.
@@ -242,6 +247,29 @@ def pulse_interference(a_v):
     Returns:
         None: Plots the interference.
     '''
+
+    # Pulse
+    v_min = c/4000e-9
+    v_max = c/400e-9
+    v0 = c/1560e-9
+    e_p = 50e-12 
+    # e_p = 3.5e-11
+    t_fwhm = 210e-15
+    # t_fwhm = 50e-15
+
+    T0 = t_fwhm / 1.763
+    P0_expected = e_p / T0
+    print("Expected P0 (W):", P0_expected)
+    # phi_NL = 1.3 * P0_expected * 0.01
+    # print("Nonlinear phase shift (rad):", phi_NL)
+
+
+    #JULIA ADDED:
+    # dv = 300e12
+    # v_min = v0 - dv
+    # v_max = v0 + dv
+
+    n_points = 2**13 # 20 for sidebands
 
     # and a_v_aux is the newly created auxiliary pulse object
     # I'll create it here
@@ -289,7 +317,13 @@ def pulse_interference(a_v):
     plt.legend()
     plt.show()
 
-pulse_interference(a_v)
+
+
+# Running my methods:
+pulse, new_pulse, z, a_t, a_v, sim = create_pulse_simulate()
+nice_plot(a_v, sim, pulse)
+nonlin_phas_shift(a_t, pulse)
+pulse_interference(a_v, pulse)
 
 #%% Adding in Julia's Plots:
 # t = pulse.t_grid
