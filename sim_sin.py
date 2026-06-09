@@ -5,11 +5,12 @@ Created on Tue Jul  9 14:10:14 2024
 @author: Pooja Sekhar and Julia White
 """
 
-# %% Imports
+# Imports
 
 import os, copy
 import numpy as np
-rng = np.random.default_rng()
+seed_value = 42
+rng = np.random.default_rng(seed_value)
 
 from scipy import interpolate, signal
 from scipy.constants import c, pi, h
@@ -27,36 +28,20 @@ import pynlo
 # from pynlo.utility import fft
 
 
-def create_pulse_simulate():
+def setup_waveguide_and_pulse():
     '''
-    Method that creates the pulse parameters and waveguide parameters (used in making the mode). It then runs the simulation
-    of the pulse propagating through the waveguide.
+    Creates the base pulse and waveguide that will be used.
     Params:
         None
     Returns:
-        The pulses's properties (TO DO: DEFINE THESE)
+        pulse: the pynlo object that represents the pulse
+        mode: the pynlo object that represents the waveguide
+        v_grid: the frequency grid over which the pulse and mode are created
     '''
 
     # Pulse
-    v_min = c/4000e-9
-    v_max = c/400e-9
-    v0 = c/1560e-9
-    e_p = 50e-12 
-    # e_p = 3.5e-11
-    t_fwhm = 210e-15
-    # t_fwhm = 50e-15
-
-    T0 = t_fwhm / 1.763
-    P0_expected = e_p / T0
-    print("Expected P0 (W):", P0_expected)
-    # phi_NL = 1.3 * P0_expected * 0.01
-    # print("Nonlinear phase shift (rad):", phi_NL)
-
-
-    #JULIA ADDED:
-    # dv = 300e12
-    # v_min = v0 - dv
-    # v_max = v0 + dv
+    v_min, v_max, v0 = c/4000e-9, c/400e-9, c/1560e-9
+    e_p, t_fwhm = 50e-12, 210e-15
 
     n_points = 2**13 # 20 for sidebands
 
@@ -64,9 +49,13 @@ def create_pulse_simulate():
     print("Frq Res: {:.3g} GHz".format(pulse.dv * 1e-9))
     v_grid = pulse.v_grid
 
-    # SiN waveguide
-    thickness = 600e-9 # 420, 350
-    width = 1200e-9 # 1300, 1800
+    T0 = t_fwhm / 1.763
+    P0_expected = e_p / T0
+    print("Expected P0 (W):", P0_expected)
+
+    # Waveguide
+    thickness, width = 600e-9, 1200e-9
+
     import ri_interpolator
     sim_freqs = ri_interpolator.sim_freqs
     sim_oversample = np.linspace(sim_freqs.min(), sim_freqs.max(), sim_freqs.size*100)
@@ -101,14 +90,6 @@ def create_pulse_simulate():
 
     omega = 2*np.pi * pulse.v_grid  # angular frequency [rad/s]
 
-    # beta_w = pynlo.utility.chi1.n_to_beta(omega, n_eff_spline(omega))
-
-    # g3_w = pynlo.utility.chi3.gamma_to_g3(omega, gamma_spline(omega))
-
-
-    # # beta_v = np.zeros(len(v_grid))
-    # print(np.average(beta_v))
-    # print("LD =", T0**2 / abs(np.average(beta_v)))
 
     #---- Mode
     mode = pynlo.medium.Mode(v_grid, beta_v, alpha = None, g3=g3_v, rv_grid=rv_grid, r3=r3)
@@ -116,21 +97,36 @@ def create_pulse_simulate():
     print("Mean β₂:", np.mean(beta2))
     print("LD =", T0**2 / abs(np.average(beta2)))
 
-    length = 0.01
+    return pulse, mode, v_grid
 
-    #
-    #---- Run Sim
+def propagate_pulse(pulse, mode, length=0.01):
+    '''
+    Propagates the input pulse through the mode (waveguide).
+    Params:
+        pulse: the input pulse (a pynlo object)
+        mode: the waveguide (a pynlo objecgt)
+        length: the length of the waveguide
+    Returns:
+        new_pulse: the output pulse (a pynlo object)
+        z:
+        a_t: the EM spectrum of the pulse in the time domain
+        a_v: the EM spectrum of the pulse in the frequency domain
+        sim: the simulation?
+    '''
+
     sim = pynlo.model.NLSE(pulse, mode) # NLSE
     #---- Estimate step size
     local_error = 1e-6
     dz = sim.estimate_step_size(local_error=local_error)
     # dz = length / 2000   # 2000 steps over 5 mm → 2.5 µm steps #JULIA REDEFINED THIS
 
-    new_pulse, z, a_t, a_v = sim.simulate(length, dz=dz, local_error=local_error, n_records=100, plot="frq")
+    new_pulse, z, a_t, a_v = sim.simulate(length, dz=dz, local_error=local_error, n_records=100, plot=None)
+    # change the plot to "frq" if you want it to plot --> I don't want it to do that plot 100+ times so I set plot=None
 
-    return pulse, new_pulse, z, a_t, a_v, sim
+    return new_pulse, z, a_t, a_v, sim, v_grid
 
-# %% Plot Results
+
+# Plot Results
 
 #from matplotlib import colormaps as cm
 
@@ -317,13 +313,137 @@ def pulse_interference(a_v, pulse):
     plt.legend()
     plt.show()
 
+def inject_noise(a_v, v_grid, pulse):
+    '''
+    Method to add shot noise to the pulse.
+    Params:
+        a_v: electromagnetic spectrum of the pulse
+        v_grid: the frequency spacing of the pulse
+        pulse: the simulated pulse
+    Returns:
+        The electromagnetic spectrum of a pulse that now has noise added to it.
+    '''
+    # Calculate vacuum energy for each frequency bin
+    E_vac = 0.5 * h * v_grid
+
+    # Find the noise amplitude a_v_noise with Energy = sum(|a_v|^2 * dv)
+    a_v_noise = np.sqrt(E_vac/pulse.dv)
+
+    # Generate random noise -- this noise needs to be complex
+    random_real = rng.normal(0,1,len(v_grid))
+    random_imag = rng.normal(0,1,len(v_grid))
+
+    # # Commented ploting verifies the general Gaussian shape
+    # # Code is stolen from https://numpy.org/doc/stable/reference/random/generated/numpy.random.normal.html
+    # plt.figure()
+    # count, bins, ignored = plt.hist(random_real, 30, density=True)
+    # plt.plot(bins, 1/(1 * np.sqrt(2 * np.pi)) *
+    #             np.exp( - (bins - 0)**2 / (2 * 1**2) ),
+    #         linewidth=2, color='r')
+    # plt.show()
+
+    complex_noise = (random_real + (1j * random_imag)) / np.sqrt(2)  #sqrt(2) is there for normalization to split the variance
+                                                                    # equally across the real and imaginary axes
+
+    # scale and add to the original pulse field
+
+    return a_v + (a_v_noise * complex_noise)
 
 
 # Running my methods:
-pulse, new_pulse, z, a_t, a_v, sim = create_pulse_simulate()
-nice_plot(a_v, sim, pulse)
-nonlin_phas_shift(a_t, pulse)
-pulse_interference(a_v, pulse)
+pulse, mode, v_grid = setup_waveguide_and_pulse()
+new_pulse, z, a_t, a_v, sim, v_grid = propagate_pulse(pulse, mode, 0.01)
+noise_pulse = inject_noise(a_v, v_grid, pulse)
+nice_plot(a_v, sim, new_pulse)
+nonlin_phas_shift(a_t, new_pulse)
+pulse_interference(a_v, new_pulse)
+
+# Simulations with injected noise:
+def sim_with_noise():
+    num_iter = 100 # You will likely need 100-1000+ to get clean variance statistics
+    
+    # 1. Setup everything ONCE
+    base_pulse, mode, v_grid = setup_waveguide_and_pulse()
+    
+    # Get the clean LO pulse
+    pulse_clean, _, _, a_v_clean_out, _, _ = propagate_pulse(base_pulse, mode)
+    a_v_lo = a_v_clean_out[-1]
+    
+    # Lists to store the complex overlap integrals
+    overlaps_signal = []
+    overlaps_vacuum = []
+    
+    for i in range(num_iter):
+        print(f"Running iteration {i+1}/{num_iter}...")
+        
+        # --- A. Measure pure vacuum noise (Shot Noise Limit Reference) ---
+        # Inject noise into a zero-amplitude field
+        pure_vacuum_v = inject_noise(np.zeros_like(v_grid, dtype=complex), v_grid, pulse_clean)
+        
+        # Overlap vacuum with LO
+        c_vac = np.sum(pure_vacuum_v * np.conj(a_v_lo))
+        overlaps_vacuum.append(c_vac)
+        
+        # --- B. Measure the propagated noisy signal ---
+        # Inject noise into the actual pulse
+        noisy_input_v = inject_noise(base_pulse.a_v, v_grid, pulse_clean)
+        
+        # Note: You will need to modify create_pulse_simulate to accept the noisy a_v array directly, 
+        # or create a new Pulse object with noisy_input_v before passing it in.
+        noisy_pulse = copy.deepcopy(pulse_clean)
+        noisy_pulse.a_v = noisy_input_v
+        
+        _, _, _, a_v_out, _, _ = propagate_pulse(noisy_pulse, mode)
+
+        # Overlap propagated noisy signal with LO
+        c_sig = np.sum(a_v_out[-1] * np.conj(a_v_lo))
+        overlaps_signal.append(c_sig)
+
+    # Convert to numpy arrays
+    overlaps_signal = np.array(overlaps_signal)
+    overlaps_vacuum = np.array(overlaps_vacuum)
+
+    # 2. Sweep the LO phase to find squeezing and anti-squeezing
+    phases = np.linspace(0, 2*np.pi, 100)
+    var_signal = []
+    var_vacuum = []
+    
+    for theta in phases:
+        # Calculate quadrature X(theta)
+        x_sig = np.real(overlaps_signal * np.exp(-1j * theta))
+        x_vac = np.real(overlaps_vacuum * np.exp(-1j * theta))
+        
+        # Calculate variance
+        var_signal.append(np.var(x_sig))
+        var_vacuum.append(np.var(x_vac))
+        
+    var_signal = np.array(var_signal)
+    var_vacuum = np.array(var_vacuum)
+    
+    # 3. Calculate squeezing in dB
+    # Negative dB means squeezing, positive means anti-squeezing
+    squeezing_dB = 10 * np.log10(var_signal / np.mean(var_vacuum))
+
+    # 4. Plot the results
+    plt.figure(figsize=(8, 5))
+    plt.plot(phases, squeezing_dB, label='Output State Noise', color='tab:blue', linewidth=2)
+    plt.axhline(0, color='k', linestyle='--', label='Shot Noise Limit (0 dB)')
+    plt.xlabel('Local Oscillator Phase (rad)')
+    plt.ylabel('Noise Variance (dB)')
+    plt.title('Quantum Noise Variance vs. LO Phase')
+    plt.xlim(0, 2*np.pi)
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+    
+    print(f"Maximum Squeezing: {np.min(squeezing_dB):.2f} dB")
+    print(f"Maximum Anti-Squeezing: {np.max(squeezing_dB):.2f} dB")
+
+    return phases, squeezing_dB
+
+phases, squeezing_dB = sim_with_noise()
+
+    
 
 #%% Adding in Julia's Plots:
 # t = pulse.t_grid
