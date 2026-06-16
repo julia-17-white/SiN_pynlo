@@ -10,7 +10,6 @@ Created on Tue Jul  9 14:10:14 2024
 import os, copy
 import numpy as np
 seed_value = 42
-rng = np.random.default_rng(seed_value)
 
 from scipy import interpolate, signal
 from scipy.constants import c, pi, h
@@ -24,6 +23,10 @@ plt.rcParams['grid.alpha'] = 0.25
 plt.rcParams['savefig.dpi'] = 600
 import matplotlib.ticker as mticker
 import pynlo 
+import copy
+import concurrent.futures
+import time
+
 # from pynlo.medium import RamanResponse
 # from pynlo.utility import fft
 
@@ -123,7 +126,7 @@ def propagate_pulse(pulse, mode, length=0.01):
     new_pulse, z, a_t, a_v = sim.simulate(length, dz=dz, local_error=local_error, n_records=100, plot=None)
     # change the plot to "frq" if you want it to plot --> I don't want it to do that plot 100+ times so I set plot=None
 
-    return new_pulse, z, a_t, a_v, sim, v_grid
+    return new_pulse, z, a_t, a_v, sim
 
 
 # Plot Results
@@ -232,7 +235,7 @@ def nonlin_phas_shift(a_t, pulse):
     print(f"True nonlinear phase shift at the peak: {phase_pure_nonlinear[peak_idx]:.2f} rad")
 
 
-#%% Creating a second pulse and interfering the two pulses
+# Creating a second pulse and interfering the two pulses
 
 def pulse_interference(a_v, pulse):
     '''
@@ -270,7 +273,7 @@ def pulse_interference(a_v, pulse):
     # and a_v_aux is the newly created auxiliary pulse object
     # I'll create it here
 
-    e_p_aux = e_p*100
+    e_p_aux = e_p/100
     pulse_aux = pynlo.light.Pulse.Sech(n_points, v_min, v_max, v0, e_p_aux, t_fwhm)
     a_v_aux = pulse_aux.a_v
 
@@ -313,7 +316,32 @@ def pulse_interference(a_v, pulse):
     plt.legend()
     plt.show()
 
-def inject_noise(a_v, v_grid, pulse):
+
+# Global placeholders that will live inside each separate worker core process
+_worker_pulse = None
+_worker_mode = None
+_worker_v_grid = None
+_worker_a_v_lo = None
+
+def init_worker():
+    """
+    This runs once on each CPU core when the process pool spawns.
+    It initializes the un-picklable pynlo objects locally on that core.
+    """
+    global _worker_pulse, _worker_mode, _worker_v_grid, _worker_a_v_lo
+    
+    # Generate the base pulse and mode directly on this core
+    _worker_pulse, _worker_mode, _worker_v_grid = setup_waveguide_and_pulse()
+    
+    # Generate the clean Local Oscillator profile directly on this core
+    print("Calculating clean LO pulse on each core...")
+    _, _, _, a_v_clean_out, _ = propagate_pulse(_worker_pulse, _worker_mode)
+    _worker_a_v_lo = a_v_clean_out[-1]
+
+
+
+
+def inject_noise(a_v, v_grid, pulse, local_rng):
     '''
     Method to add shot noise to the pulse.
     Params:
@@ -330,8 +358,8 @@ def inject_noise(a_v, v_grid, pulse):
     a_v_noise = np.sqrt(E_vac/pulse.dv)
 
     # Generate random noise -- this noise needs to be complex
-    random_real = rng.normal(0,1,len(v_grid))
-    random_imag = rng.normal(0,1,len(v_grid))
+    random_real = local_rng.normal(0,1,len(v_grid))
+    random_imag = local_rng.normal(0,1,len(v_grid))
 
     # # Commented ploting verifies the general Gaussian shape
     # # Code is stolen from https://numpy.org/doc/stable/reference/random/generated/numpy.random.normal.html
@@ -349,56 +377,84 @@ def inject_noise(a_v, v_grid, pulse):
 
     return a_v + (a_v_noise * complex_noise)
 
+def run_single_iteration(iteration_index):
+    if iteration_index == 2:
+        s = time.time()
 
-# Running my methods:
-pulse, mode, v_grid = setup_waveguide_and_pulse()
-new_pulse, z, a_t, a_v, sim, v_grid = propagate_pulse(pulse, mode, 0.01)
-noise_pulse = inject_noise(a_v, v_grid, pulse)
-nice_plot(a_v, sim, new_pulse)
-nonlin_phas_shift(a_t, new_pulse)
-pulse_interference(a_v, new_pulse)
+    global _worker_pulse, _worker_mode, _worker_v_grid, _worker_a_v_lo
+
+    local_rng = np.random.default_rng(seed_value + iteration_index)
+
+    # --- A. Measure pure vacuum noise (Shot Noise Limit Reference) ---
+    # Inject noise into a zero-amplitude field
+    pure_vacuum_v = inject_noise(np.zeros_like(_worker_v_grid, dtype=complex), _worker_v_grid, _worker_pulse, local_rng)
+    c_vac = np.sum(pure_vacuum_v * np.conj(_worker_a_v_lo))
+
+    # --- B. Measure the propagated noisy signal ---
+    # Inject noise into the actual pulse
+    noisy_input_v = inject_noise(_worker_pulse.a_v, _worker_v_grid, _worker_pulse, local_rng)
+
+    noisy_pulse = copy.deepcopy(_worker_pulse)
+    noisy_pulse.a_v = noisy_input_v
+    
+    # Propagate the noisy pulse
+    _, _, _, a_v_out, _ = propagate_pulse(noisy_pulse, _worker_mode)
+    c_sig = np.sum(a_v_out[-1] * np.conj(_worker_a_v_lo))
+    
+    if iteration_index == 2:
+        print(f'One iteration run time: {time.time() - s} s')
+
+    # Return the results back to the main process
+    return c_vac, c_sig
+
+# # Running my methods:
+# pulse, mode, v_grid = setup_waveguide_and_pulse()
+# new_pulse, z, a_t, a_v, sim, v_grid = propagate_pulse(pulse, mode, 0.01)
+# noise_pulse = inject_noise(a_v, v_grid, pulse)
+# nice_plot(a_v, sim, new_pulse)
+# nonlin_phas_shift(a_t, new_pulse)
+# pulse_interference(a_v, new_pulse)
 
 # Simulations with injected noise:
-def sim_with_noise():
-    num_iter = 100 # You will likely need 100-1000+ to get clean variance statistics
+def sim_with_noise_parallel():
+    num_iter = 20 # You will likely need 100-1000+ to get clean variance statistics
     
-    # 1. Setup everything ONCE
+    # 1. Setup everything once
+    print("Setting up mode and base pulse...")
     base_pulse, mode, v_grid = setup_waveguide_and_pulse()
     
-    # Get the clean LO pulse
-    pulse_clean, _, _, a_v_clean_out, _, _ = propagate_pulse(base_pulse, mode)
-    a_v_lo = a_v_clean_out[-1]
+    # # Get the clean LO pulse
+    # print("Calculating clean LO pulse...")
+    # pulse_clean, _, _, a_v_clean_out, _ = propagate_pulse(base_pulse, mode)
+    # a_v_lo = a_v_clean_out[-1]
     
     # Lists to store the complex overlap integrals
     overlaps_signal = []
     overlaps_vacuum = []
     
-    for i in range(num_iter):
-        print(f"Running iteration {i+1}/{num_iter}...")
-        
-        # --- A. Measure pure vacuum noise (Shot Noise Limit Reference) ---
-        # Inject noise into a zero-amplitude field
-        pure_vacuum_v = inject_noise(np.zeros_like(v_grid, dtype=complex), v_grid, pulse_clean)
-        
-        # Overlap vacuum with LO
-        c_vac = np.sum(pure_vacuum_v * np.conj(a_v_lo))
-        overlaps_vacuum.append(c_vac)
-        
-        # --- B. Measure the propagated noisy signal ---
-        # Inject noise into the actual pulse
-        noisy_input_v = inject_noise(base_pulse.a_v, v_grid, pulse_clean)
-        
-        # Note: You will need to modify create_pulse_simulate to accept the noisy a_v array directly, 
-        # or create a new Pulse object with noisy_input_v before passing it in.
-        noisy_pulse = copy.deepcopy(pulse_clean)
-        noisy_pulse.a_v = noisy_input_v
-        
-        _, _, _, a_v_out, _, _ = propagate_pulse(noisy_pulse, mode)
+    print(f"Starting parallel simulation with {num_iter} iterations...")
+    # Use >4 cores (leaving the rest of my PC free so it doesn't freeze up)
+    max_cores = 1
 
-        # Overlap propagated noisy signal with LO
-        c_sig = np.sum(a_v_out[-1] * np.conj(a_v_lo))
-        overlaps_signal.append(c_sig)
-
+    # Start the multiprocessing pool
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max_cores, initializer=init_worker) as executor:
+        # Submit all tasks to the executor
+        # A list comprehension builds a list of "Futures" (pending tasks)
+        futures = [
+            executor.submit(run_single_iteration, i)
+            for i in range(num_iter)
+        ]
+        
+        # As tasks finish (in any order), gather the results
+        for i, future in enumerate(concurrent.futures.as_completed(futures)):
+            try:
+                c_vac, c_sig = future.result()
+                overlaps_vacuum.append(c_vac)
+                overlaps_signal.append(c_sig)
+                print(f"Completed iteration {i+1}/{num_iter}")
+            except Exception as exc:
+                print(f"An iteration generated an exception: {exc}")
+                
     # Convert to numpy arrays
     overlaps_signal = np.array(overlaps_signal)
     overlaps_vacuum = np.array(overlaps_vacuum)
@@ -441,7 +497,18 @@ def sim_with_noise():
 
     return phases, squeezing_dB
 
-phases, squeezing_dB = sim_with_noise()
+# --- Execution Block ---
+if __name__ == '__main__':
+    # It is highly recommended to disable OpenMP threading when using ProcessPoolExecutor
+    # so threads and processes don't fight for CPU time.
+    os.environ["OMP_NUM_THREADS"] = "1"
+    
+    start_time = time.time()
+    overlaps_signal, overlaps_vacuum = sim_with_noise_parallel()
+    end_time = time.time()
+    print(f'Total run time = {(end_time - start_time):.2f} s')
+
+
 
     
 
