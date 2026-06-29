@@ -133,7 +133,7 @@ def propagate_pulse(pulse, mode, length=0.01):
 
 #from matplotlib import colormaps as cm
 
-def nice_plot(a_v, sim, pulse):
+def nice_plot(a_v, sim, pulse, a_t):
     """
     For comparison with Dudley, we plot the evolution in the time and wavelength
     domains. For accurate representation of the density, plotting over wavelength
@@ -220,19 +220,19 @@ def nonlin_phas_shift(a_t, pulse):
 
     ax2 = ax1.twinx()  
     color = 'tab:red'
-    ax2.set_ylabel('True Nonlinear Phase Shift (rad)', color=color)
+    ax2.set_ylabel('Nonlinear Phase Shift (rad)', color=color)
     # Only plot the phase where the pulse is active so it stays clean
     ax2.plot(t_ps[mask], phase_pure_nonlinear[mask], color=color, linestyle='--', linewidth=2)
     ax2.tick_params(axis='y', labelcolor=color)
 
     ax1.set_xlim(-0.4, 0.4)
-    plt.title("Pulse Profile vs. True Nonlinear Phase Shift (Noise Masked)")
+    plt.title("Pulse Profile vs. Nonlinear Phase Shift (Noise Masked)")
     fig.tight_layout()
     plt.show()
 
     # Print the actual peak value
     peak_idx = np.argmax(intensity_input)
-    print(f"True nonlinear phase shift at the peak: {phase_pure_nonlinear[peak_idx]:.2f} rad")
+    print(f"Nonlinear phase shift at the peak: {phase_pure_nonlinear[peak_idx]:.2f} rad")
 
 
 # Creating a second pulse and interfering the two pulses
@@ -411,7 +411,7 @@ def run_single_iteration(iteration_index):
 # pulse, mode, v_grid = setup_waveguide_and_pulse()
 # new_pulse, z, a_t, a_v, sim, v_grid = propagate_pulse(pulse, mode, 0.01)
 # noise_pulse = inject_noise(a_v, v_grid, pulse)
-# nice_plot(a_v, sim, new_pulse)
+# nice_plot(a_v, sim, new_pulse, a_t)
 # nonlin_phas_shift(a_t, new_pulse)
 # pulse_interference(a_v, new_pulse)
 
