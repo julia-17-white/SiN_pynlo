@@ -55,12 +55,12 @@ print("Frq Res: {:.3g} GHz".format(pulse.dv * 1e-9))
 v_grid = pulse.v_grid
 
 #%% SiN waveguide
-thickness = 600e-9 # 420, 350
-width = 1200e-9 # 1300, 1800
+thickness = 800e-9 # 420, 350
+width = 500e-9 # 1300, 1800
 # import ri_interpolator
 # sim_freqs = ri_interpolator.sim_freqs
 ## -- incorporating numpy mode files from abijith --
-mode_file = 'from_abijith/jw_modes/JW_SiN_O2Clad_800nmThickness_2200nmWidth_gamma_aeff.npy' 
+mode_file = 'from_abijith/jw_modes/JW_SiN_O2Clad_800nmThickness_500nmWidth_gamma_aeff.npy' 
 data = np.load(mode_file)
 
 # --- 1. Extract and Convert Data
@@ -108,10 +108,25 @@ g3_v = pynlo.utility.chi3.gamma_to_g3(v_grid, gamma_spline(v_grid))
 #---- Mode
 mode = pynlo.medium.Mode(v_grid, beta_v, alpha = None, g3=g3_v)
 # --- Verify Dispersion
+print('')
 beta2 = mode.beta2
 print(f"Mean Beta2 : {np.mean(beta2):.3e} s^2/m")
 
-length = 0.01
+# --- Calculate Soliton Period ---
+# Find the exact beta_2 at the central frequency (v0)
+idx_v0 = np.argmin(np.abs(v_grid - v0))
+beta2_v0 = beta2[idx_v0]
+
+# Calculate Soliton Period (z_0)
+z_0 = np.pi * (t_fwhm/1.7627)**2 / (2 * np.abs(beta2_v0) )
+
+print(f"Beta2 at v0 ({v0*1e-12:.2f} THz): {beta2_v0:.3e} s^2/m")
+# print(f"Dispersion Length (L_D): {L_D:.5f} m")
+print(f"Soliton Period (z_0): {z_0:.5f} m")
+
+length = 2.9e-3
+print(f"Number of Soliton Periods: {length/z_0:.5f}")
+print('')
 
 #%%
 #---- Run Sim

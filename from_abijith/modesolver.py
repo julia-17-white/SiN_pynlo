@@ -55,7 +55,7 @@ ldas = np.linspace(0.5,3.02,64)
 
 #ldas = np.array([1.55])
 
-#ldas = np.linspace(1., 2., 20)
+#ldas = np.linspace(1., 2., 20)t
 #ldas = np.array([])
 x = np.linspace(-4, 4, 400)
 y = np.linspace(-4, 4, 400)
@@ -65,7 +65,7 @@ tol = 1e-4
 boundary = '0000'
 
 # widths = np.linspace(0.8,5.,43)
-widths = np.array([5.0])
+widths = np.array([0.5])
 
 import time
 
@@ -95,7 +95,7 @@ for j in range(len(widths)):
         start = time.time()
         solver = EMpy.modesolvers.FD.SVFDModeSolver(wl, x, y, efunc, boundary,
                                                     method='Ex').solve(neigs, tol)
-        print(f'run time: {time.time()-start}')
+        print(f'run time: {(time.time()-start):.2f}s')
         Aeffs[k],gammas[k] = modeparams(solver.Ex[0],solver.x,solver.y,wl,solver.neff[0])
         
         neffs[k] = solver.neff[0]
