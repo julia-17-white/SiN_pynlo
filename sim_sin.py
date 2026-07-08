@@ -133,7 +133,7 @@ def propagate_pulse(pulse, mode, length=0.01):
 
 #from matplotlib import colormaps as cm
 
-def nice_plot(a_v, sim, pulse, a_t):
+def nice_plot(a_v, sim, pulse, a_t, z):
     """
     For comparison with Dudley, we plot the evolution in the time and wavelength
     domains. For accurate representation of the density, plotting over wavelength
@@ -275,7 +275,8 @@ def pulse_interference(a_v, pulse):
 
     e_p_aux = e_p/100
     pulse_aux = pynlo.light.Pulse.Sech(n_points, v_min, v_max, v0, e_p_aux, t_fwhm)
-    a_v_aux = pulse_aux.a_v
+    a_v_aux = inject_noise(pulse_aux.a_v, pulse_aux.v_grid, pulse_aux, local_rng=np.random.default_rng(seed_value - 1))
+    # a_v_aux = noisy_aux.a_v
 
     # Define your tuning parameters
     tau = 150e-15      # Time delay in seconds (e.g., 200 fs)
@@ -309,9 +310,9 @@ def pulse_interference(a_v, pulse):
 
     plt.xlabel('Frequency (THz)')
     plt.ylabel('Relative Intensity (dB)')
-    plt.title('Spectral Interference (Homodyne Mixing Profile)')
+    plt.title('Spectral Interference')
     plt.xlim(150, 250) # Focus on your pulse bandwidth
-    plt.ylim(-40, 5)
+    # plt.ylim(-40, 5)
     plt.grid(True)
     plt.legend()
     plt.show()
@@ -398,7 +399,7 @@ def run_single_iteration(iteration_index):
     noisy_pulse.a_v = noisy_input_v
     
     # Propagate the noisy pulse
-    _, _, _, a_v_out, _ = propagate_pulse(noisy_pulse, _worker_mode)
+    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(noisy_pulse, _worker_mode)
     c_sig = np.sum(a_v_out[-1] * np.conj(_worker_a_v_lo))
     
     if iteration_index == 2:
@@ -423,10 +424,24 @@ def sim_with_noise_parallel():
     print("Setting up mode and base pulse...")
     base_pulse, mode, v_grid = setup_waveguide_and_pulse()
     
-    # # Get the clean LO pulse
-    # print("Calculating clean LO pulse...")
-    # pulse_clean, _, _, a_v_clean_out, _ = propagate_pulse(base_pulse, mode)
-    # a_v_lo = a_v_clean_out[-1]
+    # Run one sequential test iteration on the main thread
+    print("Running diagnostic single iteration...")
+    # Generate the noise spectrum using the pristine base pulse inputs
+    noisy_a_v_in = inject_noise(base_pulse.a_v, v_grid, base_pulse, local_rng=np.random.default_rng(seed_value - 1))
+    
+    # Create a deep copy of the base pulse so we don't modify the master template
+    input_pulse = copy.deepcopy(base_pulse)
+    
+    # Inject the noise into the spectrum BEFORE propagation
+    input_pulse.a_v = noisy_a_v_in 
+    
+    # Propagate the noisy pulse through the waveguide
+    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(input_pulse, mode, 0.01)
+    
+    # Safely plot the results on the main thread
+    nice_plot(a_v_out, sim, new_pulse, a_t, z)
+    nonlin_phas_shift(a_t, new_pulse)
+    pulse_interference(a_v_out, new_pulse)
     
     # Lists to store the complex overlap integrals
     overlaps_signal = []
@@ -434,7 +449,7 @@ def sim_with_noise_parallel():
     
     print(f"Starting parallel simulation with {num_iter} iterations...")
     # Use >4 cores (leaving the rest of my PC free so it doesn't freeze up)
-    max_cores = 1
+    max_cores = 2
 
     # Start the multiprocessing pool
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_cores, initializer=init_worker) as executor:
