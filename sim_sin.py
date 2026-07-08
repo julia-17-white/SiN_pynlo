@@ -44,7 +44,7 @@ def setup_waveguide_and_pulse():
 
     # Pulse
     v_min, v_max, v0 = c/4000e-9, c/400e-9, c/1560e-9
-    e_p, t_fwhm = 50e-12, 210e-15
+    e_p, t_fwhm = 50e-12, 240e-15
 
     n_points = 2**13 # 20 for sidebands
 
@@ -52,80 +52,83 @@ def setup_waveguide_and_pulse():
     print("Frq Res: {:.3g} GHz".format(pulse.dv * 1e-9))
     v_grid = pulse.v_grid
 
-#%% SiN waveguide
-thickness = 800e-9 # 420, 350
-width = 500e-9 # 1300, 1800
-# import ri_interpolator
-# sim_freqs = ri_interpolator.sim_freqs
-## -- incorporating numpy mode files from abijith --
-mode_file = 'from_abijith/jw_modes/JW_SiN_O2Clad_800nmThickness_500nmWidth_gamma_aeff.npy' 
-data = np.load(mode_file)
+    T0 = t_fwhm / 1.763
+    P0_expected = e_p / T0
+    print("Expected P0 (W):", P0_expected)
 
-# --- 1. Extract and Convert Data
-# Column 0: Wavelength (assumed microns from modesolver.py)
-# Column 1: n_eff
-# Column 2: gamma (1/W/m)
-# Column 3: A_eff (m^2)
-wvl_um = data[:, 0]
-n_eff_data = data[:, 1]
-gamma_data = data[:, 2] 
+    # SiN waveguide
+    thickness, width = 800e-9, 800e-9
+    # import ri_interpolator
+    # sim_freqs = ri_interpolator.sim_freqs
+    ## -- incorporating numpy mode files from abijith --
+    mode_file = 'from_abijith/jw_modes/JW_SiN_O2Clad_800nmThickness_800nmWidth_gamma_aeff.npy' 
+    data = np.load(mode_file)
 
-# Convert to SI units for frequency mapping
-wvl_m = wvl_um * 1e-6
-freq_data = c / wvl_m
+    # --- 1. Extract and Convert Data
+    # Column 0: Wavelength (assumed microns from modesolver.py)
+    # Column 1: n_eff
+    # Column 2: gamma (1/W/m)
+    # Column 3: A_eff (m^2)
+    wvl_um = data[:, 0]
+    n_eff_data = data[:, 1]
+    gamma_data = data[:, 2] 
 
-# --- 2. Sort by Frequency 
-# Splines require the x-axis (frequency) to be strictly increasing.
-# Since wavelength increases, frequency decreases, so we must flip them.
-sort_idx = np.argsort(freq_data)
-freq_data = freq_data[sort_idx]
-n_eff_data = n_eff_data[sort_idx]
-gamma_data = gamma_data[sort_idx]
+    # Convert to SI units for frequency mapping
+    wvl_m = wvl_um * 1e-6
+    freq_data = c / wvl_m
 
-# Splines require the x-axis (frequency) to be strictly increasing.
-# Since wavelength increases, frequency decreases, so we must flip them.
-sort_idx = np.argsort(freq_data)
-freq_data = freq_data[sort_idx]
-n_eff_data = n_eff_data[sort_idx]
-gamma_data = gamma_data[sort_idx]
+    # --- 2. Sort by Frequency 
+    # Splines require the x-axis (frequency) to be strictly increasing.
+    # Since wavelength increases, frequency decreases, so we must flip them.
+    sort_idx = np.argsort(freq_data)
+    freq_data = freq_data[sort_idx]
+    n_eff_data = n_eff_data[sort_idx]
+    gamma_data = gamma_data[sort_idx]
 
-# --- 3. Create Splines
-# These will map the solver data onto your simulation's v_grid
-n_eff_spline = interpolate.InterpolatedUnivariateSpline(
-    freq_data, n_eff_data, k=3, ext="extrapolate")
+    # Splines require the x-axis (frequency) to be strictly increasing.
+    # Since wavelength increases, frequency decreases, so we must flip them.
+    sort_idx = np.argsort(freq_data)
+    freq_data = freq_data[sort_idx]
+    n_eff_data = n_eff_data[sort_idx]
+    gamma_data = gamma_data[sort_idx]
 
-gamma_spline = interpolate.InterpolatedUnivariateSpline(
-    freq_data, gamma_data, k=3, ext="extrapolate")
+    # --- 3. Create Splines
+    # These will map the solver data onto your simulation's v_grid
+    n_eff_spline = interpolate.InterpolatedUnivariateSpline(
+        freq_data, n_eff_data, k=3, ext="extrapolate")
+
+    gamma_spline = interpolate.InterpolatedUnivariateSpline(freq_data, gamma_data, k=3, ext="extrapolate")
+
+    # --- 4. Setup pynlo Mode
+    # beta_v represents the propagation constant
+    beta_v = pynlo.utility.chi1.n_to_beta(v_grid, n_eff_spline(v_grid))
+
+    # g3_v represents the third-order nonlinear coupling
     g3_v = pynlo.utility.chi3.gamma_to_g3(v_grid, gamma_spline(v_grid))
+    #---- Mode
+    mode = pynlo.medium.Mode(v_grid, beta_v, alpha = None, g3=g3_v)
+    # --- Verify Dispersion
+    print('')
+    beta2 = mode.beta2
+    print(f"Mean Beta2 : {np.mean(beta2):.3e} s^2/m")
 
-# --- 4. Setup pynlo Mode
-# beta_v represents the propagation constant
-beta_v = pynlo.utility.chi1.n_to_beta(v_grid, n_eff_spline(v_grid))
+    # --- Calculate Soliton Period ---
+    # Find the exact beta_2 at the central frequency (v0)
+    idx_v0 = np.argmin(np.abs(v_grid - v0))
+    beta2_v0 = beta2[idx_v0]
 
-# g3_v represents the third-order nonlinear coupling
-g3_v = pynlo.utility.chi3.gamma_to_g3(v_grid, gamma_spline(v_grid))
-#---- Mode
-mode = pynlo.medium.Mode(v_grid, beta_v, alpha = None, g3=g3_v)
-# --- Verify Dispersion
-print('')
-beta2 = mode.beta2
-print(f"Mean Beta2 : {np.mean(beta2):.3e} s^2/m")
+    # Calculate Soliton Period (z_0)
+    z_0 = np.pi * (t_fwhm/1.7627)**2 / (2 * np.abs(beta2_v0) )
 
-# --- Calculate Soliton Period ---
-# Find the exact beta_2 at the central frequency (v0)
-idx_v0 = np.argmin(np.abs(v_grid - v0))
-beta2_v0 = beta2[idx_v0]
-
-# Calculate Soliton Period (z_0)
-z_0 = np.pi * (t_fwhm/1.7627)**2 / (2 * np.abs(beta2_v0) )
-
-print(f"Beta2 at v0 ({v0*1e-12:.2f} THz): {beta2_v0:.3e} s^2/m")
-# print(f"Dispersion Length (L_D): {L_D:.5f} m")
-print(f"Soliton Period (z_0): {z_0:.5f} m")
+    print(f"Beta2 at v0 ({v0*1e-12:.2f} THz): {beta2_v0:.3e} s^2/m")
+    print(f"Dispersion Length (L_D): {print("LD =", T0**2 / abs(np.average(beta2)))} m")
+    print(f"Soliton Period (z_0): {z_0:.5f} m")
+    length = 0.003
+    print(f'Number of soliton periods: {length/z_0}')
 
     return pulse, mode, v_grid
 
-def propagate_pulse(pulse, mode, length=0.01):
+def propagate_pulse(pulse, mode, length=0.003):
     '''
     Propagates the input pulse through the mode (waveguide).
     Params:
@@ -208,7 +211,7 @@ def nice_plot(a_v, sim, pulse, a_t, z):
     ax2.set_ylabel('Length (mm)', labelpad = 20)
     plt.show()
 
-def nonlin_phas_shift(a_t, pulse):
+def nonlin_phas_shift(a_t, pulse, mode, length=0.003):
     '''
     Method to calculate the nonlinear phase shift that occurs in the waveguide.
     Params:
@@ -217,45 +220,51 @@ def nonlin_phas_shift(a_t, pulse):
         None: it plots the nonlinear phase shift and prints a value.
     '''
 
-    # Calculate the raw phase difference
-    phase_input = np.unwrap(np.angle(a_t[0]))
-    phase_output = np.unwrap(np.angle(a_t[-1]))
-    phase_shift_total = phase_output - phase_input
-
-    # Create a mask to ONLY look where the pulse has real power
-    # This ignores the chaotic numerical noise at the empty edges
-    intensity_input = np.abs(a_t[0])**2
-    mask = intensity_input > (np.max(intensity_input) * 1e-3) # Top 30 dB of the pulse
-
-    # Fit and remove the linear frequency shift ONLY within the pulse window
+    # 1. Get intensity and extract total output phase
+    intensity = np.abs(a_t[-1])**2
+    max_int = np.max(intensity)
+    phase_total = np.unwrap(np.angle(a_t[-1]))
+    
     t_ps = pulse.t_grid * 1e12
-    p = np.polyfit(t_ps[mask], phase_shift_total[mask], 1)
-    phase_pure_nonlinear = phase_shift_total - np.polyval(p, t_ps)
+    peak_idx = np.argmax(intensity)
 
-    # Plot the results focusing only on the physical pulse region
+    # 2. Define a strict mask for the pulse core (e.g., top 15% of intensity)
+    # This completely ignores the noisy wings where unwrap goes haywire
+    core_mask = intensity > (max_int * 0.15)
+    
+    # 3. Fit a 2nd-order polynomial (parabola) to the core phase.
+    # This represents the linear chirp (dispersion) accumulated by the pulse.
+    poly_coefficients = np.polyfit(t_ps[core_mask], phase_total[core_mask], 1)
+    linear_chirp_baseline = np.polyval(poly_coefficients, t_ps)
+    
+    # 4. Subtract the baseline to isolate the pure nonlinear phase shift
+    phase_pure_nonlinear = phase_total - linear_chirp_baseline
+    
+    # Flip the sign if necessary so that a positive intensity yields a positive phase shift plot
+    if phase_pure_nonlinear[peak_idx] < 0:
+        phase_pure_nonlinear = -phase_pure_nonlinear
+
+    # 5. Plot using a dynamic mask just for clean visualization (top 30 dB)
+    vis_mask = intensity > (max_int * 1e-3)
+
     fig, ax1 = plt.subplots(figsize=(9, 6))
-
     color = 'tab:blue'
     ax1.set_xlabel('Time (ps)')
-    ax1.set_ylabel('Normalized Intensity', color=color)
-    ax1.plot(t_ps, intensity_input / np.max(intensity_input), color=color, linewidth=2)
+    ax1.set_ylabel('Normalized Output Intensity', color=color)
+    ax1.plot(t_ps[vis_mask], intensity[vis_mask] / max_int, color=color, linewidth=2)
     ax1.tick_params(axis='y', labelcolor=color)
 
     ax2 = ax1.twinx()  
     color = 'tab:red'
-    ax2.set_ylabel('Nonlinear Phase Shift (rad)', color=color)
-    # Only plot the phase where the pulse is active so it stays clean
-    ax2.plot(t_ps[mask], phase_pure_nonlinear[mask], color=color, linestyle='--', linewidth=2)
+    ax2.set_ylabel('Pure Nonlinear Phase Shift (rad)', color=color)
+    ax2.plot(t_ps[vis_mask], phase_pure_nonlinear[vis_mask], color=color, linestyle='--', linewidth=2)
     ax2.tick_params(axis='y', labelcolor=color)
 
-    ax1.set_xlim(-0.4, 0.4)
-    plt.title("Pulse Profile vs. Nonlinear Phase Shift (Noise Masked)")
+    plt.title("True Nonlinear Phase Shift (Linear Chirp Polyminial Subtracted)")
     fig.tight_layout()
     plt.show()
 
-    # Print the actual peak value
-    peak_idx = np.argmax(intensity_input)
-    print(f"Nonlinear phase shift at the peak: {phase_pure_nonlinear[peak_idx]:.2f} rad")
+    print(f"True isolated nonlinear phase shift at the peak: {phase_pure_nonlinear[peak_idx]:.2f} rad")
 
 
 # Creating a second pulse and interfering the two pulses
@@ -441,7 +450,7 @@ def run_single_iteration(iteration_index):
 
 # Simulations with injected noise:
 def sim_with_noise_parallel():
-    num_iter = 20 # You will likely need 100-1000+ to get clean variance statistics
+    num_iter = 100 # You will likely need 100-1000+ to get clean variance statistics
     
     # 1. Setup everything once
     print("Setting up mode and base pulse...")
@@ -459,11 +468,11 @@ def sim_with_noise_parallel():
     input_pulse.a_v = noisy_a_v_in 
     
     # Propagate the noisy pulse through the waveguide
-    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(input_pulse, mode, 0.01)
+    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(input_pulse, mode, 0.003)
     
     # Safely plot the results on the main thread
     nice_plot(a_v_out, sim, new_pulse, a_t, z)
-    nonlin_phas_shift(a_t, new_pulse)
+    nonlin_phas_shift(a_t, new_pulse, mode, 0.003)
     pulse_interference(a_v_out, new_pulse)
     
     # Lists to store the complex overlap integrals
