@@ -52,53 +52,76 @@ def setup_waveguide_and_pulse():
     print("Frq Res: {:.3g} GHz".format(pulse.dv * 1e-9))
     v_grid = pulse.v_grid
 
-    T0 = t_fwhm / 1.763
-    P0_expected = e_p / T0
-    print("Expected P0 (W):", P0_expected)
+#%% SiN waveguide
+thickness = 800e-9 # 420, 350
+width = 500e-9 # 1300, 1800
+# import ri_interpolator
+# sim_freqs = ri_interpolator.sim_freqs
+## -- incorporating numpy mode files from abijith --
+mode_file = 'from_abijith/jw_modes/JW_SiN_O2Clad_800nmThickness_500nmWidth_gamma_aeff.npy' 
+data = np.load(mode_file)
 
-    # Waveguide
-    thickness, width = 600e-9, 1200e-9
+# --- 1. Extract and Convert Data
+# Column 0: Wavelength (assumed microns from modesolver.py)
+# Column 1: n_eff
+# Column 2: gamma (1/W/m)
+# Column 3: A_eff (m^2)
+wvl_um = data[:, 0]
+n_eff_data = data[:, 1]
+gamma_data = data[:, 2] 
 
-    import ri_interpolator
-    sim_freqs = ri_interpolator.sim_freqs
-    sim_oversample = np.linspace(sim_freqs.min(), sim_freqs.max(), sim_freqs.size*100)
-    sim_n_eff, sim_gamma, sim_a_eff = ri_interpolator.refractive_index_and_gamma(
-        [thickness], [width], sim_freqs, mode='Ex')
-    print(f'sim_gamma = {np.mean(sim_gamma)}')
-    # sim_gamma = 10.5
-    gamma_spline = interpolate.InterpolatedUnivariateSpline(
-        sim_freqs,
-        sim_gamma,
-        ext="extrapolate")
-    n_eff_spline = interpolate.InterpolatedUnivariateSpline(
-    sim_freqs,
-    sim_n_eff,
-    ext="extrapolate",
-    k=3)
+# Convert to SI units for frequency mapping
+wvl_m = wvl_um * 1e-6
+freq_data = c / wvl_m
 
+# --- 2. Sort by Frequency 
+# Splines require the x-axis (frequency) to be strictly increasing.
+# Since wavelength increases, frequency decreases, so we must flip them.
+sort_idx = np.argsort(freq_data)
+freq_data = freq_data[sort_idx]
+n_eff_data = n_eff_data[sort_idx]
+gamma_data = gamma_data[sort_idx]
+
+# Splines require the x-axis (frequency) to be strictly increasing.
+# Since wavelength increases, frequency decreases, so we must flip them.
+sort_idx = np.argsort(freq_data)
+freq_data = freq_data[sort_idx]
+n_eff_data = n_eff_data[sort_idx]
+gamma_data = gamma_data[sort_idx]
+
+# --- 3. Create Splines
+# These will map the solver data onto your simulation's v_grid
+n_eff_spline = interpolate.InterpolatedUnivariateSpline(
+    freq_data, n_eff_data, k=3, ext="extrapolate")
+
+gamma_spline = interpolate.InterpolatedUnivariateSpline(
+    freq_data, gamma_data, k=3, ext="extrapolate")
     g3_v = pynlo.utility.chi3.gamma_to_g3(v_grid, gamma_spline(v_grid))
 
-    beta_v = pynlo.utility.chi1.n_to_beta(v_grid, n_eff_spline(v_grid))
+# --- 4. Setup pynlo Mode
+# beta_v represents the propagation constant
+beta_v = pynlo.utility.chi1.n_to_beta(v_grid, n_eff_spline(v_grid))
 
-    dt = pulse.dt
-    r_weights = [0.05, 13.5e-15, 45.0e-15]  # Approximate SiN Raman response
-    rv_grid, r3 = pynlo.utility.chi3.raman(n=n_points, dt=dt, r_weights=r_weights, b_weights=None, analytic=True) 
+# g3_v represents the third-order nonlinear coupling
+g3_v = pynlo.utility.chi3.gamma_to_g3(v_grid, gamma_spline(v_grid))
+#---- Mode
+mode = pynlo.medium.Mode(v_grid, beta_v, alpha = None, g3=g3_v)
+# --- Verify Dispersion
+print('')
+beta2 = mode.beta2
+print(f"Mean Beta2 : {np.mean(beta2):.3e} s^2/m")
 
-    print("Raman grid generated. Frequency points:", len(r3))
-    print(f'beta_v = {np.mean(beta_v)}')
-    domega = np.mean(np.diff(v_grid))
-    print("mean Δω:", domega)
-    omega = 2 * np.pi * pulse.v_grid   # angular frequency [rad/s]
-    print('mean omega:', np.mean(omega))
+# --- Calculate Soliton Period ---
+# Find the exact beta_2 at the central frequency (v0)
+idx_v0 = np.argmin(np.abs(v_grid - v0))
+beta2_v0 = beta2[idx_v0]
 
-    omega = 2*np.pi * pulse.v_grid  # angular frequency [rad/s]
+# Calculate Soliton Period (z_0)
+z_0 = np.pi * (t_fwhm/1.7627)**2 / (2 * np.abs(beta2_v0) )
 
-
-    #---- Mode
-    mode = pynlo.medium.Mode(v_grid, beta_v, alpha = None, g3=g3_v, rv_grid=rv_grid, r3=r3)
-    beta2 = mode.beta2
-    print("Mean β₂:", np.mean(beta2))
-    print("LD =", T0**2 / abs(np.average(beta2)))
+print(f"Beta2 at v0 ({v0*1e-12:.2f} THz): {beta2_v0:.3e} s^2/m")
+# print(f"Dispersion Length (L_D): {L_D:.5f} m")
+print(f"Soliton Period (z_0): {z_0:.5f} m")
 
     return pulse, mode, v_grid
 
@@ -531,6 +554,12 @@ if __name__ == '__main__':
 # t = pulse.t_grid
 # I_out = np.abs(a_t[-1])**2
 
+# plt.plot(t*1e12, I_out)
+# plt.axhline(0, color='k')
+# plt.xlabel("Time (ps)")
+# plt.ylabel("Intensity")
+# plt.title("Output temporal profile")
+# plt.show()
 # plt.plot(t*1e12, I_out)
 # plt.axhline(0, color='k')
 # plt.xlabel("Time (ps)")
