@@ -57,11 +57,11 @@ def setup_waveguide_and_pulse():
     print("Expected P0 (W):", P0_expected)
 
     # SiN waveguide
-    thickness, width = 800e-9, 1000e-9
+    thickness, width = 800e-9, 800e-9
     # import ri_interpolator
     # sim_freqs = ri_interpolator.sim_freqs
     ## -- incorporating numpy mode files from abijith --
-    mode_file = 'from_abijith/jw_modes/JW_SiN_O2Clad_800nmThickness_1000nmWidth_gamma_aeff.npy' 
+    mode_file = 'from_abijith/jw_modes/JW_SiN_O2Clad_800nmThickness_800nmWidth_gamma_aeff.npy' 
     data = np.load(mode_file)
 
     # --- 1. Extract and Convert Data
@@ -121,11 +121,16 @@ def setup_waveguide_and_pulse():
     z_0 = np.pi * (t_fwhm/1.7627)**2 / (2 * np.abs(beta2_v0) )
 
     print(f"Beta2 at v0 ({v0*1e-12:.2f} THz): {beta2_v0:.3e} s^2/m")
-    print(f"Dispersion Length (L_D): {print("LD =", T0**2 / abs(np.mean(beta2)))} m")
+    LD = T0**2 / abs(beta2_v0)
+    print(f"Dispersion Length (L_D): {LD} m")
     print(f"Soliton Period (z_0): {z_0:.5f} m")
     length = 0.003
     print(f'Number of soliton periods: {length/z_0}')
     print(f'typical gamma: {np.mean(gamma_data)}')
+    n_square = np.mean(gamma_data)*P0_expected*(T0**2)/abs(beta2_v0)
+    l_nonlin = 1/(np.mean(gamma_data)*P0_expected)
+    print(f'Nonlinear length: {l_nonlin}')
+    print(f'n_square = {n_square} or {LD/l_nonlin}')
 
     return pulse, mode, v_grid
 
@@ -453,7 +458,7 @@ def run_single_iteration(iteration_index):
 
 # Simulations with injected noise:
 def sim_with_noise_parallel():
-    num_iter = 100 # You will likely need 100-1000+ to get clean variance statistics
+    num_iter = 5 # You will likely need 100-1000+ to get clean variance statistics
     
     # 1. Setup everything once
     print("Setting up mode and base pulse...")
