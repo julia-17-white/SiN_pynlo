@@ -5,10 +5,16 @@ In generating the mode file, I calculate the effective index and nonlinear param
 ### Mode Calculations:
 _Fill this in_
 
+These outputs go into all of the PyNLO propagation so the single propagation matching experiment indicates that these are likely accurate.
+
+This is done with our group's version of [PyNLO](https://github.com/UCBoulder/PyNLO). Email me if you need access. These steps were modified from a script provided by Pooja Sekhar.
+
 ### Single Propagation:
 _Fill this in_
 
-These output were verified with the Octave Photonics waveguide propagation GUI and with Thomas Charland's MatLab code. 
+These outputs were verified with the Octave Photonics waveguide propagation GUI and with Thomas Charland's MatLab code. 
+
+This is done with our group's version of [PyNLO](https://github.com/UCBoulder/PyNLO). Email me if you need access. These steps were modified from a script provided by Pooja Sekhar.
 
 *to do:* verify these with waveguides in your experiment.
 
@@ -23,3 +29,6 @@ This squeezing search occurs in a number of steps.
 7. Calculate the quadratures with a phase sweep. In doing this, I use $x_{sig} = c_{sig}e^{-i\theta}$ and $x_{vac} = c_{vac}e^{-i\theta}$ with $0\le \theta < 2\pi$. This is essentially adding a slightly different phase (delay) to each of the propagation outputs to mimic scanning the delay line.
 8. I use `np.var` to calculate the variances of these quadratures. This uses the standard variance formula $$\frac{\sum_i|a_i-\bar{a}|}{N}$$. `var_signal` is the signal's noise variance and `var_vacuum` is the variance of the vacuum noise.
 9. Calculate the dB of squeezing using $$S_{dB} = 10\log_{10}\left(\frac{\sigma^2_{sig}}{\bar{\sigma^2_{vac}}}\right)$$. The denominator is using the average vacuum or shot noise so that I can see how far above and below it I am when I plug in the maximum and minimum signal noise vairances or plot $S_{dB}$.
+
+I bin the noise using the steps in `v_grid`. These frequency steps have $\delta\nu = 1/T$ where $T$ is the width of the finite time span. This follows the frequency resolution that is described in section 3.1 of [Paschotta's Noise of MLLs paper](https://link.springer.com/content/pdf/10.1007/s00340-004-1547-x.pdf).
+*to do:* check that the entire span is $N/T$.
