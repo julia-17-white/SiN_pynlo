@@ -44,7 +44,7 @@ def setup_waveguide_and_pulse():
 
     # Pulse
     v_min, v_max, v0 = c/4000e-9, c/400e-9, c/1560e-9
-    e_p, t_fwhm = 50e-12, 240e-15
+    e_p, t_fwhm = 14.7e-12, 260e-15
 
     n_points = 2**13 # 20 for sidebands
 
@@ -60,53 +60,41 @@ def setup_waveguide_and_pulse():
     thickness, width = 800e-9, 800e-9
     # import ri_interpolator
     # sim_freqs = ri_interpolator.sim_freqs
-    ## -- incorporating numpy mode files from abijith --
-    mode_file = 'from_abijith/jw_modes/JW_SiN_O2Clad_800nmThickness_800nmWidth_gamma_aeff.npy' 
-    data = np.load(mode_file)
+    # --- 1. Define Experimental HNLF Parameters ---
+    # NOTE: Ensure these are converted to standard SI units for PyNLO
+    # converting 10.7 W^-1 km^-1 to W^-1 m^-1
+    gamma_val = 10.7 / 1000.0 
+    
+    # Experimental Dispersion
+    D_ps_nm_km = 5.6 
 
-    # --- 1. Extract and Convert Data
-    # Column 0: Wavelength (assumed microns from modesolver.py)
-    # Column 1: n_eff
-    # Column 2: gamma (1/W/m)
-    # Column 3: A_eff (m^2)
-    wvl_um = data[:, 0]
-    n_eff_data = data[:, 1]
-    gamma_data = data[:, 2] 
+    # --- 2. Convert D to beta2 ---
+    # Convert D to SI units (s/m^2): 1 ps = 1e-12 s, 1 nm = 1e-9 m, 1 km = 1e3 m
+    D_SI = D_ps_nm_km * (1e-12) / (1e-9 * 1e3)
+    lambda_0 = c / v0 # Center wavelength in meters
+    
+    beta2_val = - (lambda_0**2 / (2 * pi * c)) * D_SI
+    print(f"Calculated beta2: {beta2_val:.3e} s^2/m")
 
-    # Convert to SI units for frequency mapping
-    wvl_m = wvl_um * 1e-6
-    freq_data = c / wvl_m
+    # --- 2. Construct Constant Nonlinearity ---
+    # Create an array where gamma is constant across all frequencies
+    gamma_array = np.full_like(v_grid, gamma_val)
+    g3_v = pynlo.utility.chi3.gamma_to_g3(v_grid, gamma_array)
 
-    # --- 2. Sort by Frequency 
-    # Splines require the x-axis (frequency) to be strictly increasing.
-    # Since wavelength increases, frequency decreases, so we must flip them.
-    sort_idx = np.argsort(freq_data)
-    freq_data = freq_data[sort_idx]
-    n_eff_data = n_eff_data[sort_idx]
-    gamma_data = gamma_data[sort_idx]
+    # --- 3. Construct Analytical Dispersion ---
+    # Build beta(omega) using a Taylor expansion around the center frequency.
+    # We set beta_0 = 0 and beta_1 = 0 since we operate in the co-moving frame.
+    w_grid = 2 * np.pi * v_grid
+    w0 = 2 * np.pi * v0
+    
+    beta_v = 0.5 * beta2_val * (w_grid - w0)**2
 
-    # Splines require the x-axis (frequency) to be strictly increasing.
-    # Since wavelength increases, frequency decreases, so we must flip them.
-    sort_idx = np.argsort(freq_data)
-    freq_data = freq_data[sort_idx]
-    n_eff_data = n_eff_data[sort_idx]
-    gamma_data = gamma_data[sort_idx]
+    dt = pulse.dt
+    r_weights = [0.18, 12.2e-15, 32e-15]  # Approximate SiN Raman response
+    rv_grid, r3 = pynlo.utility.chi3.raman(n=n_points, dt=dt, r_weights=r_weights, b_weights=None, analytic=True) 
 
-    # --- 3. Create Splines
-    # These will map the solver data onto your simulation's v_grid
-    n_eff_spline = interpolate.InterpolatedUnivariateSpline(
-        freq_data, n_eff_data, k=3, ext="extrapolate")
-
-    gamma_spline = interpolate.InterpolatedUnivariateSpline(freq_data, gamma_data, k=3, ext="extrapolate")
-
-    # --- 4. Setup pynlo Mode
-    # beta_v represents the propagation constant
-    beta_v = pynlo.utility.chi1.n_to_beta(v_grid, n_eff_spline(v_grid))
-
-    # g3_v represents the third-order nonlinear coupling
-    g3_v = pynlo.utility.chi3.gamma_to_g3(v_grid, gamma_spline(v_grid))
-    #---- Mode
-    mode = pynlo.medium.Mode(v_grid, beta_v, alpha = None, g3=g3_v)
+    # --- 4. Setup pynlo Mode ---
+    mode = pynlo.medium.Mode(v_grid, beta_v, alpha=None, g3=g3_v, rv_grid=rv_grid, r3=r3)
     # --- Verify Dispersion
     print('')
     beta2 = mode.beta2
@@ -120,21 +108,21 @@ def setup_waveguide_and_pulse():
     # Calculate Soliton Period (z_0)
     z_0 = np.pi * (t_fwhm/1.7627)**2 / (2 * np.abs(beta2_v0) )
 
-    print(f"Beta2 at v0 ({v0*1e-12:.2f} THz): {beta2_v0:.3e} s^2/m")
-    LD = T0**2 / abs(beta2_v0)
-    print(f"Dispersion Length (L_D): {LD} m")
-    print(f"Soliton Period (z_0): {z_0:.5f} m")
-    length = 0.003
-    print(f'Number of soliton periods: {length/z_0}')
-    print(f'typical gamma: {np.mean(gamma_data)}')
-    n_square = np.mean(gamma_data)*P0_expected*(T0**2)/abs(beta2_v0)
-    l_nonlin = 1/(np.mean(gamma_data)*P0_expected)
-    print(f'Nonlinear length: {l_nonlin}')
-    print(f'n_square = {n_square} or {LD/l_nonlin}')
+    # print(f"Beta2 at v0 ({v0*1e-12:.2f} THz): {beta2_v0:.3e} s^2/m")
+    # LD = T0**2 / abs(beta2_v0)
+    # print(f"Dispersion Length (L_D): {LD} m")
+    # print(f"Soliton Period (z_0): {z_0:.5f} m")
+    # length = 0.003
+    # print(f'Number of soliton periods: {length/z_0}')
+    # print(f'typical gamma: {np.mean(gamma_data)}')
+    # n_square = np.mean(gamma_data)*P0_expected*(T0**2)/abs(beta2_v0)
+    # l_nonlin = 1/(np.mean(gamma_data)*P0_expected)
+    # print(f'Nonlinear length: {l_nonlin}')
+    # print(f'n_square = {n_square} or {LD/l_nonlin}')
 
     return pulse, mode, v_grid
 
-def propagate_pulse(pulse, mode, length=0.003):
+def propagate_pulse(pulse, mode, length=7.0):
     '''
     Propagates the input pulse through the mode (waveguide).
     Params:
@@ -153,6 +141,7 @@ def propagate_pulse(pulse, mode, length=0.003):
     #---- Estimate step size
     local_error = 1e-6
     dz = sim.estimate_step_size(local_error=local_error)
+    # dz = dz = 1e-3  # 1 mm step size guarantees numerical stability
     # dz = length / 2000   # 2000 steps over 5 mm → 2.5 µm steps #JULIA REDEFINED THIS
 
     new_pulse, z, a_t, a_v = sim.simulate(length, dz=dz, local_error=local_error, n_records=100, plot=None)
@@ -217,7 +206,7 @@ def nice_plot(a_v, sim, pulse, a_t, z):
     ax2.set_ylabel('Length (mm)', labelpad = 20)
     plt.show()
 
-def nonlin_phas_shift(a_t, pulse, mode, length=0.003):
+def nonlin_phas_shift(a_t, pulse, mode, length=7.0):
     '''
     Method to calculate the nonlinear phase shift that occurs in the waveguide.
     Params:
@@ -289,9 +278,9 @@ def pulse_interference(a_v, pulse):
     v_min = c/4000e-9
     v_max = c/400e-9
     v0 = c/1560e-9
-    e_p = 50e-12 
+    e_p = 14.7e-12 
     # e_p = 3.5e-11
-    t_fwhm = 210e-15
+    t_fwhm = 260e-15
     # t_fwhm = 50e-15
 
     T0 = t_fwhm / 1.763
@@ -369,16 +358,14 @@ def init_worker():
     """
     global _worker_pulse, _worker_mode, _worker_v_grid, _worker_a_v_lo, _worker_a_v_clean_out
     
-    # Generate the base pulse and mode directly on this core
     _worker_pulse, _worker_mode, _worker_v_grid = setup_waveguide_and_pulse()
-    _worker_a_v_lo = copy.deepcopy(_worker_pulse.a_v)
-    clean_pulse = copy.deepcopy(_worker_pulse)
     
-    # Generate the clean Local Oscillator profile directly on this core
-    print("Calculating clean LO pulse on each core...")
-    _, _, _, a_v_clean, _ = propagate_pulse(clean_pulse, _worker_mode)
+    clean_pulse = copy.deepcopy(_worker_pulse)
+    _, _, _, a_v_clean, _ = propagate_pulse(clean_pulse, _worker_mode, length=7.0)
     _worker_a_v_clean_out = a_v_clean[-1]
-
+    
+    # Use the perfectly matched output mean field as the LO
+    _worker_a_v_lo = copy.deepcopy(_worker_a_v_clean_out)
 
 
 def inject_noise(a_v, v_grid, pulse, local_rng):
@@ -438,7 +425,7 @@ def run_single_iteration(iteration_index):
     noisy_pulse.a_v = noisy_input_v
     
     # Propagate the noisy pulse
-    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(noisy_pulse, _worker_mode)
+    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(noisy_pulse, _worker_mode, length=7.0)
     delta_a_v = a_v_out[-1] - _worker_a_v_clean_out # not sure if this step is necessary but it is technically isolating the noise fluctuations
     c_sig = np.sum(delta_a_v * np.conj(_worker_a_v_lo))
     
@@ -458,7 +445,7 @@ def run_single_iteration(iteration_index):
 
 # Simulations with injected noise:
 def sim_with_noise_parallel():
-    num_iter = 5 # You will likely need 100-1000+ to get clean variance statistics
+    num_iter = 100 # You will likely need 100-1000+ to get clean variance statistics
     
     # 1. Setup everything once
     print("Setting up mode and base pulse...")
@@ -476,11 +463,11 @@ def sim_with_noise_parallel():
     input_pulse.a_v = noisy_a_v_in 
     
     # Propagate the noisy pulse through the waveguide
-    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(input_pulse, mode, 0.003)
+    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(input_pulse, mode, length=7.0)
     
     # Safely plot the results on the main thread
     nice_plot(a_v_out, sim, new_pulse, a_t, z)
-    nonlin_phas_shift(a_t, new_pulse, mode, 0.003)
+    nonlin_phas_shift(a_t, new_pulse, mode, length=7.0)
     pulse_interference(a_v_out, new_pulse)
     
     # Lists to store the complex overlap integrals
@@ -515,7 +502,7 @@ def sim_with_noise_parallel():
     overlaps_vacuum = np.array(overlaps_vacuum)
 
     # 2. Sweep the LO phase to find squeezing and anti-squeezing
-    phases = np.linspace(0, 2*np.pi, 100)
+    phases = np.linspace(0, 2*np.pi, num_iter)
     var_signal = []
     var_vacuum = []
     
