@@ -9,6 +9,7 @@ Created on Tue Jul  9 14:10:14 2024
 
 import os, copy
 import numpy as np
+import pandas as pd
 seed_value = 42
 
 from scipy import interpolate, signal
@@ -44,17 +45,75 @@ def setup_waveguide_and_pulse():
 
     # Pulse
     v_min, v_max, v0 = c/4000e-9, c/400e-9, c/1560e-9
-    e_p, t_fwhm = 50e-12, 240e-15
+    e_p, t_fwhm = 40e-12, 210e-15
 
     n_points = 2**13 # 20 for sidebands
 
     pulse = pynlo.light.Pulse.Sech(n_points, v_min, v_max, v0, e_p, t_fwhm)
-    print("Frq Res: {:.3g} GHz".format(pulse.dv * 1e-9))
-    v_grid = pulse.v_grid
+    
+    # file_data =  pd.read_excel('laser_spectrum.xlsx')
+    # # Assuming Column 0 is Wavelength (nm) and Column 1 is Intensity (dB or dBm)
+    # # (Adjust the column indices if your CSV is formatted differently)
+    # wvl_nm = file_data.iloc[:, 0].values
+    # intensity_dB = file_data.iloc[:, 1].values
+    
+    # # 2. Convert Wavelength to Frequency and dB to Linear Power
+    # wvl_m = wvl_nm * 1e-9
+    # freq_hz = c / wvl_m
+    # power_linear = 10**(intensity_dB / 10.0)
+    
+    # # 3. Sort the arrays 
+    # # Splines require strictly increasing X-values. 
+    # # Because frequency is inverse to wavelength, we must reverse the order.
+    # sort_idx = np.argsort(freq_hz)
+    # freq_hz = freq_hz[sort_idx]
+    # power_linear = power_linear[sort_idx]
+    
+    # # 4. Create a Callable Spline
+    # # ext=1 tells the spline to return 0 for frequencies outside your OSA data range
+    # power_spline = interpolate.InterpolatedUnivariateSpline(freq_hz, power_linear, k=3, ext=1)
+    
+    # # 5. Initialize the PyNLO Pulse
+    # v_min, v_max, v0 = c/4000e-9, c/400e-9, c/1560e-9
+    # e_p = 36e-12
+    # n_points = 2**13
+    
+    # pulse = pynlo.light.Pulse.FromPowerSpectrum(
+    #     p_v=power_spline, 
+    #     n=n_points, 
+    #     v_min=v_min, 
+    #     v_max=v_max, 
+    #     v0=v0, 
+    #     e_p=e_p
+    # )
+    # print("Frq Res: {:.3g} GHz".format(pulse.dv * 1e-9))
+    # v_grid = pulse.v_grid
 
-    T0 = t_fwhm / 1.763
-    P0_expected = e_p / T0
-    print("Expected P0 (W):", P0_expected)
+    # T0 = t_fwhm / 1.763
+    # P0_expected = e_p / T0
+    # print("Expected P0 (W):", P0_expected)
+
+    # # Apply Group Delay Dispersion (GDD) to stretch it to 240 fs
+    # # GDD is applied as a quadratic phase in the frequency domain.
+    # # A GDD of ~10,000 fs^2 (1e-28 s^2) is a good starting estimate to stretch 210fs to 240fs.
+    # gdd = 5e-27 
+    
+    # omega = 2 * np.pi * pulse.v_grid
+    # omega0 = 2 * np.pi * v0
+    
+    # # Calculate and apply the spectral phase
+    # spectral_phase = 0.5 * gdd * (omega - omega0)**2
+    # pulse.a_v = pulse.a_v * np.exp(1j * spectral_phase)
+    
+    # print(f"FTL Duration (set): {t_fwhm*1e15:.1f} fs")
+    
+    # # Optional: Verify the new chirped temporal FWHM
+    # # (Extracting FWHM by finding the half-maximum points of the intensity)
+    # I_t = np.abs(pulse.a_t)**2
+    # half_max = np.max(I_t) / 2.0
+    # above_half_max = np.where(I_t >= half_max)[0]
+    # t_fwhm_chirped = pulse.t_grid[above_half_max[-1]] - pulse.t_grid[above_half_max[0]]
+    # print(f"Chirped Duration (simulated): {t_fwhm_chirped*1e15:.1f} fs")
 
     # SiN waveguide
     thickness, width = 800e-9, 800e-9
@@ -202,7 +261,7 @@ def nice_plot(a_v, sim, pulse, a_t, z):
     p_t_dB -= p_t_dB.max()
     ax1.plot(1e12*pulse.t_grid, np.abs(a_t[0])**2/np.max( np.abs(a_t[0])**2), color="b", label = 'Input')
     ax1.plot(1e12*pulse.t_grid, np.abs(a_t[-1])**2/np.max( np.abs(a_t[-1])**2), color="g", label = 'Output')
-    ax1.plot(1e12*pulse.t_grid, np.abs(a_t[12])**2/np.max( np.abs(a_t[12])**2), color="r", label = 'Bubbles')
+    # ax1.plot(1e12*pulse.t_grid, np.abs(a_t[12])**2/np.max( np.abs(a_t[12])**2), color="r", label = 'Bubbles')
     im = ax3.pcolormesh(1e12*pulse.t_grid, 1e3*z, p_t_dB,
                     vmin=-57.0, vmax=0, shading="auto", cmap = 'nipy_spectral')
     ax1.set_ylim(bottom=-0.1, top=1.1)
@@ -210,12 +269,67 @@ def nice_plot(a_v, sim, pulse, a_t, z):
     # ax1.set_xlim(left=-2.0, right=2.0)
     ax1.legend()
     ax3.set_xlabel('Time (ps)')
+    ax3.set_xlim(-0.4,0.4)
     cb_ax = fig.add_axes([.91,.125,.02,.454])
     fig.colorbar(im,orientation='vertical',cax=cb_ax)
 
-    ax0.set_ylabel('Intensity (dB)')
+    ax0.set_ylabel('Intensity (arb.)')
     ax2.set_ylabel('Length (mm)', labelpad = 20)
     plt.show()
+
+
+def plot_osa_spectrum(a_v, sim, pulse):
+    """
+    Plots the spectrum mimicking an OSA output.
+    X-axis: Wavelength (nm)
+    Y-axis: Intensity (dB/nm)
+    """
+    # 1. Convert frequency grid to wavelength grid (in nm)
+    wvl_nm = (c / pulse.v_grid) * 1e9
+    
+    # 2. Extract input and output fields
+    # sim.dv_dl is the Jacobian converting Power/Hz to Power/m.
+    # We multiply by 1e-9 to convert Power/m to Power/nm.
+    p_in_per_nm = np.abs(a_v[0])**2 * sim.dv_dl * 1e-9
+    p_out_per_nm = np.abs(a_v[-1])**2 * sim.dv_dl * 1e-9
+    
+    # 3. Convert to dB scale
+    # We add a tiny offset (1e-20) to prevent log10(0) warnings
+    p_in_dB = 10 * np.log10(p_in_per_nm + 1e-20)
+    p_out_dB = 10 * np.log10(p_out_per_nm + 1e-20)
+
+    # Normalize to the input peak to match your experimental plot
+    max_dB = np.max(p_in_dB)
+    p_in_dB -= max_dB
+    p_out_dB -= max_dB
+    
+    # Optional: If you want RELATIVE intensity (normalized to 0 dB max), uncomment these:
+    # max_dB = np.max(p_out_dB)
+    # p_in_dB -= max_dB
+    # p_out_dB -= max_dB
+    
+    # 4. Create the Plot
+    plt.figure("OSA Spectrum", figsize=(9, 6))
+    
+    plt.plot(wvl_nm, p_in_dB, color="tab:blue", label="Input")
+    plt.plot(wvl_nm, p_out_dB, color="tab:green", label="Output")
+    
+    plt.xlabel("Wavelength (nm)")
+    plt.ylabel("Intensity (dB/nm)")
+    plt.title("Simulated OSA Output Spectrum")
+    
+    # Adjust these limits based on your specific pulse bandwidth
+    # plt.xlim(1000, 2200) 
+    plt.xlim(1500, 1620)
+    
+    # Dynamically scale the y-axis to focus on the top 60 dB of the signal
+    # plt.ylim(np.max(p_out_dB) - 60, np.max(p_out_dB) + 5)
+    
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
 
 def nonlin_phas_shift(a_t, pulse, mode, length=0.003):
     '''
@@ -480,6 +594,7 @@ def sim_with_noise_parallel():
     
     # Safely plot the results on the main thread
     nice_plot(a_v_out, sim, new_pulse, a_t, z)
+    plot_osa_spectrum(a_v_out, sim, new_pulse)
     nonlin_phas_shift(a_t, new_pulse, mode, 0.003)
     pulse_interference(a_v_out, new_pulse)
     
