@@ -44,11 +44,12 @@ def setup_waveguide_and_pulse():
 
     # Pulse
     v_min, v_max, v0 = c/4000e-9, c/400e-9, c/1560e-9
-    e_p, t_fwhm = 14.7e-12, 260e-15
+    e_p, t_fwhm = 14.7e-12 * 0.8, 260e-15
 
     n_points = 2**13 # 20 for sidebands
 
     pulse = pynlo.light.Pulse.Sech(n_points, v_min, v_max, v0, e_p, t_fwhm)
+    pulse_coh = pynlo.light.Pulse.Sech(n_points, v_min, v_max, v0, 44e-12, t_fwhm)
     print("Frq Res: {:.3g} GHz".format(pulse.dv * 1e-9))
     v_grid = pulse.v_grid
 
@@ -120,7 +121,7 @@ def setup_waveguide_and_pulse():
     # print(f'Nonlinear length: {l_nonlin}')
     # print(f'n_square = {n_square} or {LD/l_nonlin}')
 
-    return pulse, mode, v_grid
+    return pulse, mode, v_grid, pulse_coh
 
 def propagate_pulse(pulse, mode, length=7.0):
     '''
@@ -345,6 +346,59 @@ def pulse_interference(a_v, pulse):
     plt.show()
 
 
+def plot_osa_spectrum(a_v, sim, pulse, pulse_coh):
+    """
+    Plots the spectrum mimicking an OSA output.
+    X-axis: Wavelength (nm)
+    Y-axis: Intensity (dB/nm)
+    """
+    # 1. Convert frequency grid to wavelength grid (in nm)
+    wvl_nm = (c / pulse.v_grid) * 1e9
+    
+    # 2. Extract input and output fields
+    # sim.dv_dl is the Jacobian converting Power/Hz to Power/m.
+    # We multiply by 1e-9 to convert Power/m to Power/nm.
+    p_in_per_nm = np.abs(pulse_coh.a_v)**2 * sim.dv_dl * 1e-9
+    p_out_per_nm = np.abs(a_v[-1])**2 * sim.dv_dl * 1e-9
+    
+    # 3. Convert to dB scale
+    # We add a tiny offset (1e-20) to prevent log10(0) warnings
+    p_in_dB = 10 * np.log10(p_in_per_nm + 1e-20)
+    p_out_dB = 10 * np.log10(p_out_per_nm + 1e-20)
+
+    # Normalize to the input peak to match your experimental plot
+    max_dB = np.max(p_in_dB)
+    p_in_dB -= max_dB
+    p_out_dB -= max_dB
+    
+    # Optional: If you want RELATIVE intensity (normalized to 0 dB max), uncomment these:
+    # max_dB = np.max(p_out_dB)
+    # p_in_dB -= max_dB
+    # p_out_dB -= max_dB
+    
+    # 4. Create the Plot
+    plt.figure("OSA Spectrum", figsize=(9, 6))
+    
+    plt.plot(wvl_nm, p_in_dB, color="tab:blue", label="Input")
+    plt.plot(wvl_nm, p_out_dB, color="tab:green", label="Output")
+    
+    plt.xlabel("Wavelength (nm)")
+    plt.ylabel("Intensity (dB/nm)")
+    plt.title("Simulated OSA Output Spectrum")
+    
+    # Adjust these limits based on your specific pulse bandwidth
+    # plt.xlim(1000, 2200) 
+    plt.xlim(1500, 1620)
+    
+    # Dynamically scale the y-axis to focus on the top 60 dB of the signal
+    # plt.ylim(np.max(p_out_dB) - 60, np.max(p_out_dB) + 5)
+    
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+
 # Global placeholders that will live inside each separate worker core process
 _worker_pulse = None
 _worker_mode = None
@@ -358,7 +412,7 @@ def init_worker():
     """
     global _worker_pulse, _worker_mode, _worker_v_grid, _worker_a_v_lo, _worker_a_v_clean_out
     
-    _worker_pulse, _worker_mode, _worker_v_grid = setup_waveguide_and_pulse()
+    _worker_pulse, _worker_mode, _worker_v_grid, _pulse_coh = setup_waveguide_and_pulse()
     
     clean_pulse = copy.deepcopy(_worker_pulse)
     _, _, _, a_v_clean, _ = propagate_pulse(clean_pulse, _worker_mode, length=7.0)
@@ -449,7 +503,7 @@ def sim_with_noise_parallel():
     
     # 1. Setup everything once
     print("Setting up mode and base pulse...")
-    base_pulse, mode, v_grid = setup_waveguide_and_pulse()
+    base_pulse, mode, v_grid, pulse_coh = setup_waveguide_and_pulse()
     
     # Run one sequential test iteration on the main thread
     print("Running diagnostic single iteration...")
@@ -467,8 +521,9 @@ def sim_with_noise_parallel():
     
     # Safely plot the results on the main thread
     nice_plot(a_v_out, sim, new_pulse, a_t, z)
-    nonlin_phas_shift(a_t, new_pulse, mode, length=7.0)
-    pulse_interference(a_v_out, new_pulse)
+    plot_osa_spectrum(a_v_out, sim, new_pulse, pulse_coh)
+    # nonlin_phas_shift(a_t, new_pulse, mode, length=7.0)
+    # pulse_interference(a_v_out, new_pulse)
     
     # Lists to store the complex overlap integrals
     overlaps_signal = []
@@ -505,6 +560,7 @@ def sim_with_noise_parallel():
     phases = np.linspace(0, 2*np.pi, num_iter)
     var_signal = []
     var_vacuum = []
+    eta = .5
     
     for theta in phases:
         # Calculate quadrature X(theta)
@@ -517,10 +573,11 @@ def sim_with_noise_parallel():
         
     var_signal = np.array(var_signal)
     var_vacuum = np.array(var_vacuum)
+    var_measured = (eta * var_signal) + ((1 - eta) * var_vacuum)
     
     # 3. Calculate squeezing in dB
     # Negative dB means squeezing, positive means anti-squeezing
-    squeezing_dB = 10 * np.log10(var_signal / np.mean(var_vacuum))
+    squeezing_dB = 10 * np.log10(var_measured / np.mean(var_vacuum))
 
     # 4. Plot the results
     plt.figure(figsize=(8, 5))
