@@ -44,83 +44,89 @@ def setup_waveguide_and_pulse():
     '''
 
     # Pulse
-    v_min, v_max, v0 = c/4000e-9, c/400e-9, c/1560e-9
-    e_p, t_fwhm = 40e-12, 210e-15
-
-    n_points = 2**13 # 20 for sidebands
-
-    pulse = pynlo.light.Pulse.Sech(n_points, v_min, v_max, v0, e_p, t_fwhm)
-    
-    # file_data =  pd.read_excel('laser_spectrum.xlsx')
-    # # Assuming Column 0 is Wavelength (nm) and Column 1 is Intensity (dB or dBm)
-    # # (Adjust the column indices if your CSV is formatted differently)
-    # wvl_nm = file_data.iloc[:, 0].values
-    # intensity_dB = file_data.iloc[:, 1].values
-    
-    # # 2. Convert Wavelength to Frequency and dB to Linear Power
-    # wvl_m = wvl_nm * 1e-9
-    # freq_hz = c / wvl_m
-    # power_linear = 10**(intensity_dB / 10.0)
-    
-    # # 3. Sort the arrays 
-    # # Splines require strictly increasing X-values. 
-    # # Because frequency is inverse to wavelength, we must reverse the order.
-    # sort_idx = np.argsort(freq_hz)
-    # freq_hz = freq_hz[sort_idx]
-    # power_linear = power_linear[sort_idx]
-    
-    # # 4. Create a Callable Spline
-    # # ext=1 tells the spline to return 0 for frequencies outside your OSA data range
-    # power_spline = interpolate.InterpolatedUnivariateSpline(freq_hz, power_linear, k=3, ext=1)
-    
-    # # 5. Initialize the PyNLO Pulse
     # v_min, v_max, v0 = c/4000e-9, c/400e-9, c/1560e-9
-    # e_p = 36e-12
-    # n_points = 2**13
+    # e_p, t_fwhm = 40e-12, 210e-15
+
+    # n_points = 2**13 # 20 for sidebands
+
+    # pulse = pynlo.light.Pulse.Sech(n_points, v_min, v_max, v0, e_p, t_fwhm)
     
-    # pulse = pynlo.light.Pulse.FromPowerSpectrum(
-    #     p_v=power_spline, 
-    #     n=n_points, 
-    #     v_min=v_min, 
-    #     v_max=v_max, 
-    #     v0=v0, 
-    #     e_p=e_p
-    # )
-    # print("Frq Res: {:.3g} GHz".format(pulse.dv * 1e-9))
     # v_grid = pulse.v_grid
 
-    # T0 = t_fwhm / 1.763
-    # P0_expected = e_p / T0
-    # print("Expected P0 (W):", P0_expected)
+    
+    file_data =  pd.read_excel('laser_spectrum.xlsx')
+    # Assuming Column 0 is Wavelength (nm) and Column 1 is Intensity (dB or dBm)
+    # (Adjust the column indices if your CSV is formatted differently)
+    wvl_nm = file_data.iloc[:, 0].values
+    intensity_dB = file_data.iloc[:, 1].values
+    
+    # 2. Convert Wavelength to Frequency and dB to Linear Power
+    wvl_m = wvl_nm * 1e-9
+    freq_hz = c / wvl_m
+    power_linear = 10**(intensity_dB / 10.0)
+    
+    # 3. Sort the arrays 
+    # Splines require strictly increasing X-values. 
+    # Because frequency is inverse to wavelength, we must reverse the order.
+    sort_idx = np.argsort(freq_hz)
+    freq_hz = freq_hz[sort_idx]
+    power_linear = power_linear[sort_idx]
+    
+    # 4. Create a Callable Spline
+    # ext=1 tells the spline to return 0 for frequencies outside your OSA data range
+    power_spline = interpolate.InterpolatedUnivariateSpline(freq_hz, power_linear, k=3, ext=1)
+    
+    # 5. Initialize the PyNLO Pulse
+    v_min, v_max, v0 = c/4000e-9, c/400e-9, c/1560e-9
+    e_p = 40e-12 * 0.6
+    t_fwhm = 210e-15
+    n_points = 2**13
+    
+    pulse = pynlo.light.Pulse.FromPowerSpectrum(
+        p_v=power_spline, 
+        n=n_points, 
+        v_min=v_min, 
+        v_max=v_max, 
+        v0=v0, 
+        e_p=e_p
+    )
+    print("Frq Res: {:.3g} GHz".format(pulse.dv * 1e-9))
+    v_grid = pulse.v_grid
 
-    # # Apply Group Delay Dispersion (GDD) to stretch it to 240 fs
-    # # GDD is applied as a quadratic phase in the frequency domain.
-    # # A GDD of ~10,000 fs^2 (1e-28 s^2) is a good starting estimate to stretch 210fs to 240fs.
-    # gdd = 5e-27 
+    T0 = t_fwhm / 1.763
+    P0_expected = e_p / (2*T0)
+    print("Expected P0 (W):", P0_expected)
+
+    # Apply Group Delay Dispersion (GDD) to stretch it to 240 fs
+    gdd = 1e-27 
     
-    # omega = 2 * np.pi * pulse.v_grid
-    # omega0 = 2 * np.pi * v0
+    omega = 2 * np.pi * pulse.v_grid
+    omega0 = 2 * np.pi * v0
     
-    # # Calculate and apply the spectral phase
-    # spectral_phase = 0.5 * gdd * (omega - omega0)**2
-    # pulse.a_v = pulse.a_v * np.exp(1j * spectral_phase)
+    # Calculate and apply the spectral phase
+    spectral_phase = 0.5 * gdd * (omega - omega0)**2
+    pulse.a_v = pulse.a_v * np.exp(1j * spectral_phase)
     
-    # print(f"FTL Duration (set): {t_fwhm*1e15:.1f} fs")
+    print(f"FTL Duration (set): {t_fwhm*1e15:.1f} fs")
     
-    # # Optional: Verify the new chirped temporal FWHM
-    # # (Extracting FWHM by finding the half-maximum points of the intensity)
-    # I_t = np.abs(pulse.a_t)**2
-    # half_max = np.max(I_t) / 2.0
-    # above_half_max = np.where(I_t >= half_max)[0]
-    # t_fwhm_chirped = pulse.t_grid[above_half_max[-1]] - pulse.t_grid[above_half_max[0]]
-    # print(f"Chirped Duration (simulated): {t_fwhm_chirped*1e15:.1f} fs")
+    # Optional: Verify the new chirped temporal FWHM
+    # (Extracting FWHM by finding the half-maximum points of the intensity)
+    I_t = np.abs(pulse.a_t)**2
+    half_max = np.max(I_t) / 2.0
+    above_half_max = np.where(I_t >= half_max)[0]
+    t_fwhm_chirped = pulse.t_grid[above_half_max[-1]] - pulse.t_grid[above_half_max[0]]
+    print(f"Chirped Duration (simulated): {t_fwhm_chirped*1e15:.1f} fs")
+
+    T0 = t_fwhm / 1.763
+    P0_expected = e_p / T0
+    print("Expected P0 (W):", P0_expected)
 
     # SiN waveguide
-    thickness, width = 800e-9, 800e-9
+    thickness, width = 800e-9, 5000e-9
     # import ri_interpolator
     # sim_freqs = ri_interpolator.sim_freqs
     ## -- incorporating numpy mode files from abijith --
-    mode_file = 'from_abijith/jw_modes/JW_SiN_O2Clad_800nmThickness_800nmWidth_gamma_aeff.npy' 
+    mode_file = 'from_abijith/jw_modes/JW_SiN_O2Clad_800nmThickness_5000nmWidth_gamma_aeff.npy' 
     data = np.load(mode_file)
 
     # --- 1. Extract and Convert Data
@@ -307,6 +313,16 @@ def plot_osa_spectrum(a_v, sim, pulse):
     # max_dB = np.max(p_out_dB)
     # p_in_dB -= max_dB
     # p_out_dB -= max_dB
+
+    # Saving the data to a dataframe
+    data = {
+        'wavelength': wvl_nm,
+        'in': p_in_dB,
+        'out': p_out_dB
+    }
+
+    df = pd.DataFrame(data)
+    df.to_csv('simulated_spectra.csv', index=False)
     
     # 4. Create the Plot
     plt.figure("OSA Spectrum", figsize=(9, 6))

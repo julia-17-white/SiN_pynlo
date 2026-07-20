@@ -65,7 +65,7 @@ tol = 1e-4
 boundary = '0000'
 
 # widths = np.linspace(0.8,5.,43)
-widths = np.array([0.5])
+widths = np.array([1.1])
 
 import time
 
