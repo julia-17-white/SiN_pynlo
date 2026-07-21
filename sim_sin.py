@@ -419,7 +419,8 @@ def init_worker():
     _worker_a_v_clean_out = a_v_clean[-1]
     
     # Use the perfectly matched output mean field as the LO
-    _worker_a_v_lo = copy.deepcopy(_worker_a_v_clean_out)
+    field_ratio = np.sqrt(150e-6 / 14.7e-3)
+    _worker_a_v_lo = field_ratio * copy.deepcopy(_worker_a_v_clean_out)
 
 
 def inject_noise(a_v, v_grid, pulse, local_rng):
@@ -458,6 +459,39 @@ def inject_noise(a_v, v_grid, pulse, local_rng):
 
     return a_v + (a_v_noise * complex_noise)
 
+def verify_vacuum_energy(pulse, v_grid, N=1000):
+
+    energies = np.zeros_like(v_grid)
+
+    for i in range(N):
+
+        rng = np.random.default_rng(i)
+
+        noise = inject_noise(
+            np.zeros_like(v_grid,dtype=complex),
+            v_grid,
+            pulse,
+            rng
+        )
+
+        energies += np.abs(noise)**2 * pulse.dv
+
+    energies /= N
+
+    expected = 0.5*h*v_grid
+
+    plt.figure(figsize=(8,4))
+    plt.plot(v_grid*1e-12,
+             energies/expected)
+
+    plt.axhline(1,color='k',ls='--')
+    plt.xlabel("Frequency (THz)")
+    plt.ylabel("Measured / Expected")
+    plt.title("Vacuum Energy Verification")
+    plt.grid()
+    plt.show()
+
+
 def run_single_iteration(iteration_index):
     if iteration_index == 2:
         s = time.time()
@@ -469,7 +503,6 @@ def run_single_iteration(iteration_index):
     # --- A. Measure pure vacuum noise (Shot Noise Limit Reference) ---
     # Inject noise into a zero-amplitude field
     pure_vacuum_v = inject_noise(np.zeros_like(_worker_v_grid, dtype=complex), _worker_v_grid, _worker_pulse, local_rng)
-    c_vac = np.sum(pure_vacuum_v * np.conj(_worker_a_v_lo))
 
     # --- B. Measure the propagated noisy signal ---
     # Inject noise into the actual pulse
@@ -481,13 +514,13 @@ def run_single_iteration(iteration_index):
     # Propagate the noisy pulse
     new_pulse, z, a_t, a_v_out, sim = propagate_pulse(noisy_pulse, _worker_mode, length=7.0)
     delta_a_v = a_v_out[-1] - _worker_a_v_clean_out # not sure if this step is necessary but it is technically isolating the noise fluctuations
-    c_sig = np.sum(delta_a_v * np.conj(_worker_a_v_lo))
+    I_ref = np.sum(np.abs(a_v_out[-1])**2) * _worker_pulse.dv
     
     if iteration_index == 2:
         print(f'One iteration run time: {time.time() - s} s')
 
     # Return the results back to the main process
-    return c_vac, c_sig
+    return I_ref, a_v_out[-1]
 
 # # Running my methods:
 # pulse, mode, v_grid = setup_waveguide_and_pulse()
@@ -504,6 +537,7 @@ def sim_with_noise_parallel():
     # 1. Setup everything once
     print("Setting up mode and base pulse...")
     base_pulse, mode, v_grid, pulse_coh = setup_waveguide_and_pulse()
+    prop_pulse, z, a_t, a_v_out, sim = propagate_pulse(base_pulse, mode, length=7.0)
     
     # Run one sequential test iteration on the main thread
     print("Running diagnostic single iteration...")
@@ -522,6 +556,7 @@ def sim_with_noise_parallel():
     # Safely plot the results on the main thread
     nice_plot(a_v_out, sim, new_pulse, a_t, z)
     plot_osa_spectrum(a_v_out, sim, new_pulse, pulse_coh)
+    # verify_vacuum_energy(base_pulse, v_grid, 1000)
     # nonlin_phas_shift(a_t, new_pulse, mode, length=7.0)
     # pulse_interference(a_v_out, new_pulse)
     
@@ -557,27 +592,40 @@ def sim_with_noise_parallel():
     overlaps_vacuum = np.array(overlaps_vacuum)
 
     # 2. Sweep the LO phase to find squeezing and anti-squeezing
-    phases = np.linspace(0, 2*np.pi, num_iter)
+    phases = np.linspace(0, 3*np.pi, 100)
+
     var_signal = []
-    var_vacuum = []
-    eta = .5
-    
+    eta = 0.78
+
+    field_ratio = np.sqrt(150e-6/14.7e-3)
+
     for theta in phases:
-        # Calculate quadrature X(theta)
-        x_sig = np.real(overlaps_signal * np.exp(-1j * theta))
-        x_vac = np.real(overlaps_vacuum * np.exp(-1j * theta))
-        
-        # Calculate variance
-        var_signal.append(np.var(x_sig))
-        var_vacuum.append(np.var(x_vac))
-        
+
+        samples = []
+
+        for field in overlaps_signal:
+
+            aux = field_ratio * prop_pulse.a_v * np.exp(1j*theta)
+
+            total = field + aux * .97
+
+            I = np.sum(
+                np.abs(total)**2
+            ) * prop_pulse.dv
+
+            samples.append(I)
+
+        var_signal.append(np.var(samples))
+
     var_signal = np.array(var_signal)
-    var_vacuum = np.array(var_vacuum)
-    var_measured = (eta * var_signal) + ((1 - eta) * var_vacuum)
-    
-    # 3. Calculate squeezing in dB
-    # Negative dB means squeezing, positive means anti-squeezing
-    squeezing_dB = 10 * np.log10(var_measured / np.mean(var_vacuum))
+
+    var_ref = np.var(overlaps_vacuum)
+
+    var_measured = eta*var_signal + (1-eta)*var_ref
+
+    squeezing_dB = -10*np.log10(
+        var_measured/var_ref
+    )
 
     # 4. Plot the results
     plt.figure(figsize=(8, 5))
@@ -586,8 +634,8 @@ def sim_with_noise_parallel():
     plt.xlabel('Local Oscillator Phase (rad)')
     plt.ylabel('Noise Variance (dB)')
     plt.title('Quantum Noise Variance vs. LO Phase')
-    plt.xlim(0, 2*np.pi)
-    plt.legend()
+    # plt.xlim(0, 2*np.pi)
+    plt.legend(loc='upper right')
     plt.grid(True)
     plt.show()
     
