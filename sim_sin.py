@@ -75,7 +75,7 @@ def setup_waveguide_and_pulse():
     # import ri_interpolator
     # sim_freqs = ri_interpolator.sim_freqs
     ## -- incorporating numpy mode files from abijith --
-    mode_file = 'from_abijith/jw_modes/JW_SiN_O2Clad_800nmThickness_2000nmWidth_gamma_aeff.npy' 
+    mode_file = 'from_abijith/jw_modes/JW_SiN_O2Clad_800nmThickness_1400nmWidth_gamma_aeff.npy' 
     data = np.load(mode_file)
 
     # --- 1. Extract and Convert Data
@@ -511,7 +511,7 @@ def run_single_iteration(iteration_index):
     # --- A. Measure pure vacuum noise (Shot Noise Limit Reference) ---
     # Inject noise into a zero-amplitude field
     pure_vacuum_v = inject_noise(np.zeros_like(_worker_v_grid, dtype=complex), _worker_v_grid, _worker_pulse, local_rng)
-    c_vac = np.sum(pure_vacuum_v * np.conj(_worker_a_v_lo))
+    c_vac = np.sum(pure_vacuum_v * np.conj(_worker_a_v_clean_out))
 
     # --- B. Measure the propagated noisy signal ---
     # Inject noise into the actual pulse
@@ -523,7 +523,7 @@ def run_single_iteration(iteration_index):
     # Propagate the noisy pulse
     new_pulse, z, a_t, a_v_out, sim = propagate_pulse(noisy_pulse, _worker_mode)
     delta_a_v = a_v_out[-1] - _worker_a_v_clean_out # not sure if this step is necessary but it is technically isolating the noise fluctuations
-    c_sig = np.sum(delta_a_v * np.conj(_worker_a_v_lo))
+    c_sig = np.sum(delta_a_v * np.conj(_worker_a_v_clean_out))
     
     if iteration_index == 2:
         print(f'One iteration run time: {time.time() - s} s')
