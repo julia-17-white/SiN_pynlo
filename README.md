@@ -5,30 +5,22 @@ In generating the mode file, I calculate the effective index and nonlinear param
 ### Mode Calculations:
 _Fill this in_
 
-These outputs go into all of the PyNLO propagation so the single propagation matching experiment indicates that these are likely accurate.
-
-This is done with our group's version of [PyNLO](https://github.com/UCBoulder/PyNLO). Email me if you need access. These steps were modified from a script provided by Pooja Sekhar.
-
 ### Single Propagation:
 _Fill this in_
 
-These outputs were verified with the Octave Photonics waveguide propagation GUI and with Thomas Charland's MatLab code. 
+These output were verified with the Octave Photonics waveguide propagation GUI and with Thomas Charland's MatLab code. 
 
-This is done with our group's version of [PyNLO](https://github.com/UCBoulder/PyNLO). Email me if you need access. These steps were modified from a script provided by Pooja Sekhar.
-
-*to do:* verify these with waveguides in your experiment.
+These outputs have been verified with the experiment and match pretty well.
+_To do:_ add this info here
 
 ### Squeezing Search:
 This squeezing search occurs in a number of steps.
 1. Create a base waveguide and pulse using the single propagation work. This uses options where none of the plots are generated.
 2. Create an un-propagagated LO pulse to replicate the delay line pulse. This pulse is called `_worker_a_v_lo`.
 3. Create an noiseless pulse that is propagated through the waveguide. This pulse is called `_worker_a_v_clean`.
-4. Create vacuum noise and use it to obtain the overlaps `c_vac` which are defined as $$c_{vac} = \sum \delta\alpha_{vac}\alpha^*_{LO}$$
-  matching the noise readout of balanced homodyne detection.
-6. Create the noisy initial pulse, propagate the pulse through the waveguide, and use the output to obtain the balanced homodyne overlaps `c_sig` of the signal's noise with the magnitude of the LO pulse. These overlaps are defined as $$c_{sig} = \sum \delta\alpha_{sig}\alpha^*_{LO}$$. To compute the signal's noise, I subtract the propagated clean pulse from the propagated noisy pulse.
-7. Calculate the quadratures with a phase sweep. In doing this, I use $x_{sig} = c_{sig}e^{-i\theta}$ and $x_{vac} = c_{vac}e^{-i\theta}$ with $0\le \theta < 2\pi$. This is essentially adding a slightly different phase (delay) to each of the propagation outputs to mimic scanning the delay line.
-8. I use `np.var` to calculate the variances of these quadratures. This uses the standard variance formula $$\frac{\sum_i|a_i-\bar{a}|}{N}$$. `var_signal` is the signal's noise variance and `var_vacuum` is the variance of the vacuum noise.
-9. Calculate the dB of squeezing using $$S_{dB} = 10\log_{10}\left(\frac{\sigma^2_{sig}}{\bar{\sigma^2_{vac}}}\right)$$. The denominator is using the average vacuum or shot noise so that I can see how far above and below it I am when I plug in the maximum and minimum signal noise vairances or plot $S_{dB}$.
-
-I bin the noise using the steps in `v_grid`. These frequency steps have $\delta\nu = 1/T$ where $T$ is the width of the finite time span. This follows the frequency resolution that is described in section 3.1 of [Paschotta's Noise of MLLs paper](https://link.springer.com/content/pdf/10.1007/s00340-004-1547-x.pdf).
-*to do:* check that the entire span is $N/T$.
+4. Measure the intensity of the signal pulse that was propagated with noise. This is `I_ref` and it is defined as $I_{ref} = \sum \left|a_{sqz}\right|^2 \text{d}v$ where $a_{sqz}$ is the signal pulse with its noise.
+5. Scan through various $\theta$ values and create an auxillary (LO) pulse `aux` which is defined as $a_{lo} = \mu a_{clean} e^{i\theta}$ where $\mu$ is a ratio intended to ensure a 100:1 power split between the signal and auxillary pulses and $a_{clean}$ is the un-propagated LO pulse.
+6. Measure the intensity of the signal pulse that was propagated with noise interfered with the LO puslse. This is `I` and it is defined as $I_{sig} = \sum \left|a_{sqz} + a_{lo} * 0.97\right|^2 \text{d}v$. The factor of $0.97$ is included to account for inperfect mode overlap between the pulses.
+7. I use `np.var` to calculate the variances of these intensities. This uses the standard variance formula $$\frac{\sum_i|a_i-\bar{a}|}{N}$$. `var_signal` is the signal's noise variance and `var_vacuum` is the variance of the vacuum noise.
+8. I iincorporate the $\eta = 0.78$ detection loss observed in Dan and Molly-Kate's paper. This is done as $\sigma^2_{meas} = \eta \sigma^2_{sig} + \left(1-\eta\right)\sigma^2_{ref}$.
+13. Calculate the dB of squeezing using $$S_{dB} = -10\log_{10}\left(\frac{\sigma^2_{meas}}{\bar{\sigma^2_{ref}}}\right)$$.
