@@ -144,13 +144,15 @@ def plot_osa_spectrum(a_v, sim, pulse, pulse_coh):
     data['dB_norm'] = data['dB/nm'] - data['dB/nm'].max()
 
     plt.figure()
-    plt.plot(wvl_nm, p_out_dB, color="tab:green", label="Simulated")
-    plt.plot(data['nm'], data['dB_norm'], label='Laser')
-    plt.xlim(1500, 1620)
-    plt.ylim(-80, 5)
-    plt.xlabel("Wavelength (nm)")
-    plt.ylabel("Intensity (dB/nm)")
-    plt.legend()
+    plt.plot(wvl_nm, p_out_dB, color="indigo", label="PyNLO")
+    plt.plot(data['nm'], data['dB_norm'], color='darkorange', label='Measured')
+    plt.ylim(-80,5)
+    plt.xlim(1500, 1625)
+    plt.xlabel('Wavelength (nm)', fontsize=12)
+    plt.ylabel('Relative Intensity (dB/nm)', fontsize=12)
+    plt.legend(fontsize=12)
+    plt.grid(True)
+    plt.title('Pulse Spectrum into the Waveguide', fontsize=18)
     plt.show()
 
 def nice_plot(a_v, sim, pulse, a_t, z):

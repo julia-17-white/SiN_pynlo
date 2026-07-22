@@ -30,4 +30,4 @@ This squeezing search occurs in a number of steps.
 6. Measure the intensity of the signal pulse that was propagated with noise interfered with the LO puslse. This is `I` and it is defined as $I_{sig} = \sum \left|a_{sqz} + a_{lo} * 0.97\right|^2 \text{d}v$. The factor of $0.97$ is included to account for inperfect mode overlap between the pulses.
 7. I use `np.var` to calculate the variances of these intensities. This uses the standard variance formula $$\frac{\sum_i|a_i-\bar{a}|}{N}$$. `var_signal` is the signal's noise variance and `var_vacuum` is the variance of the vacuum noise.
 8. I iincorporate the $\eta = 0.78$ detection loss observed in Dan and Molly-Kate's paper. This is done as $\sigma^2_{meas} = \eta \sigma^2_{sig} + \left(1-\eta\right)\sigma^2_{ref}$.
-13. Calculate the dB of squeezing using $$S_{dB} = -10\log_{10}\left(\frac{\sigma^2_{meas}}{\bar{\sigma^2_{ref}}}\right)$$.
+13. Calculate the dB of squeezing using $$S_{dB} = 10\log_{10}\left(\frac{\sigma^2_{meas}}{\bar{\sigma^2_{ref}}}\right)$$.

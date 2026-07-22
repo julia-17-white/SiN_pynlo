@@ -574,7 +574,7 @@ def run_single_iteration(iteration_index):
 
 # Simulations with injected noise:
 def sim_with_noise_parallel():
-    num_iter = 5 # You will likely need 100-1000+ to get clean variance statistics
+    num_iter = 100 # You will likely need 100-1000+ to get clean variance statistics
     
     # 1. Setup everything once
     print("Setting up mode and base pulse...")
@@ -658,12 +658,15 @@ def sim_with_noise_parallel():
         var_signal.append(np.var(samples))
 
     var_signal = np.array(var_signal)
+    print(f'var signal = {np.min(var_signal)}')
 
     var_ref = np.var(overlaps_vacuum)
+    print(f'var ref = {np.mean(var_ref)}')
 
     var_measured = eta*var_signal + (1-eta)*var_ref
+    print(f'var measured = {np.min(var_measured)}')
 
-    squeezing_dB = -10*np.log10(
+    squeezing_dB = 10*np.log10(
         var_measured/var_ref
     )
 
