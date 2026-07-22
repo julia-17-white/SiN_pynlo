@@ -23,6 +23,7 @@ plt.rcParams['savefig.bbox'] = 'tight'
 plt.rcParams['grid.alpha'] = 0.25
 plt.rcParams['savefig.dpi'] = 600
 import matplotlib.ticker as mticker
+plt.style.use('default')
 import pynlo 
 import copy
 import concurrent.futures
@@ -280,21 +281,21 @@ def plot_osa_spectrum(a_v, sim, pulse):
     # 4. Create the Plot
     plt.figure("OSA Spectrum", figsize=(9, 6))
     
-    plt.plot(wvl_nm, p_in_dB, color="tab:blue", label="Input")
-    plt.plot(wvl_nm, p_out_dB, color="tab:green", label="Output")
+    plt.plot(wvl_nm, p_in_dB, color="forestgreen", label="Input", linewidth=2)
+    plt.plot(wvl_nm, p_out_dB, color="indigo", label="Output", linewidth=2)
     
-    plt.xlabel("Wavelength (nm)")
-    plt.ylabel("Intensity (dB/nm)")
-    plt.title("Simulated OSA Output Spectrum")
+    plt.xlabel("Wavelength (nm)", fontsize=12)
+    plt.ylabel("Relative Intensity (dB/nm)", fontsize=12)
+    plt.title("PyNLO Spectrum", fontsize=18)
     
     # Adjust these limits based on your specific pulse bandwidth
     # plt.xlim(1000, 2200) 
-    plt.xlim(1500, 1620)
+    plt.xlim(1500, 1625)
     
     # Dynamically scale the y-axis to focus on the top 60 dB of the signal
     # plt.ylim(np.max(p_out_dB) - 60, np.max(p_out_dB) + 5)
     
-    plt.legend()
+    plt.legend(fontsize=12)
     plt.grid(True)
     plt.tight_layout()
     plt.show()
@@ -573,7 +574,7 @@ def run_single_iteration(iteration_index):
 
 # Simulations with injected noise:
 def sim_with_noise_parallel():
-    num_iter = 100 # You will likely need 100-1000+ to get clean variance statistics
+    num_iter = 5 # You will likely need 100-1000+ to get clean variance statistics
     
     # 1. Setup everything once
     print("Setting up mode and base pulse...")
@@ -632,7 +633,7 @@ def sim_with_noise_parallel():
     overlaps_vacuum = np.array(overlaps_vacuum)
 
     # 2. Sweep the LO phase to find squeezing and anti-squeezing
-    phases = np.linspace(0, 2*np.pi, 100)
+    phases = np.linspace(0, 4*np.pi, 300)
     var_signal = []
     eta = 0.78
 
@@ -646,7 +647,7 @@ def sim_with_noise_parallel():
 
             aux = field_ratio * base_pulse.a_v * np.exp(1j*theta)
 
-            total = field + aux * .9
+            total = field + aux * .97
 
             I = np.sum(
                 np.abs(total)**2
@@ -668,13 +669,13 @@ def sim_with_noise_parallel():
 
     # 4. Plot the results
     plt.figure(figsize=(8, 5))
-    plt.plot(phases, squeezing_dB, label='Output State Noise', color='tab:blue', linewidth=2)
-    plt.axhline(0, color='k', linestyle='--', label='Shot Noise Limit (0 dB)')
+    plt.plot(phases, squeezing_dB, label='Output State Noise above SNL', color='indigo', linewidth=2)
+    plt.axhline(0, color='k', linestyle='--', label='Shot Noise Limit (SNL)')
     plt.xlabel('Local Oscillator Phase (rad)')
-    plt.ylabel('Noise Variance (dB)')
-    plt.title('Quantum Noise Variance vs. LO Phase')
-    plt.xlim(0, 2*np.pi)
-    plt.legend()
+    plt.ylabel('Squeezing (dB)')
+    plt.title('Predicted Squeezing vs. LO Phase')
+    # plt.xlim(0, 2*np.pi)
+    plt.legend(loc='upper right')
     plt.grid(True)
     plt.show()
     
