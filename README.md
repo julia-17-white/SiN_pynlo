@@ -16,7 +16,7 @@ _To do:_ add this info here
 ### Noise Injection:
 [Paschotta's Noise of MLLs Part 1](https://link.springer.com/article/10.1007/s00340-004-1547-x) discusses that my frequency resolution should be $\delta v = 1/T$ where $T$ is the temporal range. By default pynlo's `dv` is the "frequency step size. This is equal to the reciprocal of the time window." This matches the Paschotta definition. Pynlo also uses `a_v` which is the "root power spectrum" so the total energy is $E = \sum \left|a_v\right|^2 \text{d}v$. This means that I can find the noise amplitude for a given pulse by with $a_{v,noise} = \sqrt{\frac{.5 h v}{\text{d}v}}$. This noise is then multiplied by some injected complex noise and added to the original pulse so it workes as the magnitude of the noise added to the pulse.
 
-The injected complex noise is found by generating two sets of Gaussian noise with a mean of zero and a standard deviation of one. These are then cast together as complex noise using $n = \frac{1}{\sqrt{2}}\left(n_{real} + i n_{complex}\rght)$.
+The injected complex noise is found by generating two sets of Gaussian noise with a mean of zero and a standard deviation of one. These are then cast together as complex noise using $n = \frac{1}{\sqrt{2}}\left(n_{real} + i n_{complex}\right)$.
 
 _to do:_ see how implementing a proper poissonian distribution changes your results
 
