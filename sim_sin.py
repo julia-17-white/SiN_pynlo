@@ -562,7 +562,7 @@ def run_single_iteration(iteration_index):
         print(f'One iteration run time: {time.time() - s} s')
 
     # Return the results back to the main process
-    return I_ref, a_v_out[-1]
+    return I_ref, a_v_out[-1], a_v_out[0]
 
 # # Running my methods:
 # pulse, mode, v_grid = setup_waveguide_and_pulse()
@@ -574,7 +574,7 @@ def run_single_iteration(iteration_index):
 
 # Simulations with injected noise:
 def sim_with_noise_parallel():
-    num_iter = 100 # You will likely need 100-1000+ to get clean variance statistics
+    num_iter = 500 # You will likely need 100-1000+ to get clean variance statistics
     
     # 1. Setup everything once
     print("Setting up mode and base pulse...")
@@ -604,6 +604,7 @@ def sim_with_noise_parallel():
     # Lists to store the complex overlap integrals
     overlaps_signal = []
     overlaps_vacuum = []
+    overlaps_in = []
     
     print(f"Starting parallel simulation with {num_iter} iterations...")
     # Use >4 cores (leaving the rest of my PC free so it doesn't freeze up)
@@ -621,9 +622,10 @@ def sim_with_noise_parallel():
         # As tasks finish (in any order), gather the results
         for i, future in enumerate(concurrent.futures.as_completed(futures)):
             try:
-                c_vac, c_sig = future.result()
+                c_vac, c_sig, c_in = future.result()
                 overlaps_vacuum.append(c_vac)
                 overlaps_signal.append(c_sig)
+                overlaps_in.append(c_in)
                 print(f"Completed iteration {i+1}/{num_iter}")
             except Exception as exc:
                 print(f"An iteration generated an exception: {exc}")
@@ -631,10 +633,12 @@ def sim_with_noise_parallel():
     # Convert to numpy arrays
     overlaps_signal = np.array(overlaps_signal)
     overlaps_vacuum = np.array(overlaps_vacuum)
+    overlaps_in = np.array(overlaps_in)
 
     # 2. Sweep the LO phase to find squeezing and anti-squeezing
     phases = np.linspace(0, 4*np.pi, 300)
     var_signal = []
+    var_in = []
     eta = 0.78
 
     field_ratio = np.sqrt(150e-6/14.7e-3)
@@ -642,6 +646,7 @@ def sim_with_noise_parallel():
     for theta in phases:
 
         samples = []
+        samples_in = []
 
         for field in overlaps_signal:
 
@@ -655,7 +660,20 @@ def sim_with_noise_parallel():
 
             samples.append(I)
 
+        for field_in in overlaps_in:
+
+            aux = field_ratio * base_pulse.a_v * np.exp(1j*theta)
+
+            total_in = field_in + aux * .97
+
+            I_in = np.sum(
+                np.abs(total_in)**2
+            ) * base_pulse.dv
+
+            samples_in.append(I_in)
+
         var_signal.append(np.var(samples))
+        var_in.append(np.var(samples_in))
 
     var_signal = np.array(var_signal)
     print(f'var signal = {np.min(var_signal)}')
@@ -670,12 +688,26 @@ def sim_with_noise_parallel():
         var_measured/var_ref
     )
 
+    var_in = np.array(var_in)
+    print(f'var signal = {np.min(var_in)}')
+
+    var_ref = np.var(overlaps_vacuum)
+    print(f'var ref = {np.mean(var_ref)}')
+
+    var_measured_in = eta*var_in + (1-eta)*var_ref
+    print(f'var measured = {np.min(var_measured_in)}')
+
+    squeezing_dB_in = 10*np.log10(
+        var_measured_in/var_ref
+    )
+
     # 4. Plot the results
     plt.figure(figsize=(8, 5))
     plt.plot(phases, squeezing_dB, label='Output State Noise above SNL', color='indigo', linewidth=2)
+    plt.plot(phases, squeezing_dB_in, label='Shot Noise Variation', color='forestgreen', linewidth=2)
     plt.axhline(0, color='k', linestyle='--', label='Shot Noise Limit (SNL)')
     plt.xlabel('Local Oscillator Phase (rad)')
-    plt.ylabel('Squeezing (dB)')
+    plt.ylabel('Quantum Noise Variance (dB)')
     plt.title('Predicted Squeezing vs. LO Phase')
     # plt.xlim(0, 2*np.pi)
     plt.legend(loc='upper right')
@@ -684,6 +716,9 @@ def sim_with_noise_parallel():
     
     print(f"Maximum Squeezing: {np.min(squeezing_dB):.2f} dB")
     print(f"Maximum Anti-Squeezing: {np.max(squeezing_dB):.2f} dB")
+
+    print(f"Maximum SNL Variation: {np.min(squeezing_dB_in):.2f} dB")
+    print(f"Maximum SNL Variation: {np.max(squeezing_dB_in):.2f} dB")
 
     return phases, squeezing_dB
 
