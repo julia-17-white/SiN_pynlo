@@ -34,7 +34,7 @@ import fiber_sim
 # from pynlo.utility import fft
 
 
-def setup_waveguide_and_pulse():
+def setup_waveguide_and_pulse(gd):
     '''
     Creates the base pulse and waveguide that will be used.
     Params:
@@ -107,6 +107,9 @@ def setup_waveguide_and_pulse():
     n_eff_data = n_eff_data[sort_idx]
     gamma_data = gamma_data[sort_idx]
 
+    if gd == 0:
+        gamma_data = np.zeros(len(freq_data))
+
     # --- 3. Create Splines
     # These will map the solver data onto your simulation's v_grid
     n_eff_spline = interpolate.InterpolatedUnivariateSpline(
@@ -117,12 +120,14 @@ def setup_waveguide_and_pulse():
     # --- 4. Setup pynlo Mode
     # beta_v represents the propagation constant
     beta_v = pynlo.utility.chi1.n_to_beta(v_grid, n_eff_spline(v_grid))
+    if gd == 0:
+        beta_v = np.zeros(len(v_grid))
 
     # g3_v represents the third-order nonlinear coupling
     g3_v = pynlo.utility.chi3.gamma_to_g3(v_grid, gamma_spline(v_grid))
 
     #---- Mode
-    length = 0.003
+    length = 0.03
     alpha_val_per_m = (0.1 / 10.0) * np.log(10) / length
     alpha_v = np.full_like(v_grid, alpha_val_per_m) # including loss
 
@@ -153,7 +158,7 @@ def setup_waveguide_and_pulse():
 
     return pulse, mode, v_grid
 
-def propagate_pulse(pulse, mode, length=0.003):
+def propagate_pulse(pulse, mode, length=0.03):
     '''
     Propagates the input pulse through the mode (waveguide).
     Params:
@@ -301,7 +306,7 @@ def plot_osa_spectrum(a_v, sim, pulse):
     plt.show()
 
 
-def nonlin_phas_shift(a_t, pulse, mode, length=0.003):
+def nonlin_phas_shift(a_t, pulse, mode, length=0.03):
     '''
     Method to calculate the nonlinear phase shift that occurs in the waveguide.
     Params:
@@ -446,7 +451,7 @@ _worker_mode = None
 _worker_v_grid = None
 _worker_a_v_lo = None
 
-def init_worker():
+def init_worker(gd):
     """
     This runs once on each CPU core when the process pool spawns.
     It initializes the un-picklable pynlo objects locally on that core.
@@ -454,7 +459,7 @@ def init_worker():
     global _worker_pulse, _worker_mode, _worker_v_grid, _worker_a_v_lo, _worker_a_v_clean_out
     
     # Generate the base pulse and mode directly on this core
-    _worker_pulse, _worker_mode, _worker_v_grid = setup_waveguide_and_pulse()
+    _worker_pulse, _worker_mode, _worker_v_grid = setup_waveguide_and_pulse(gd)
     _worker_a_v_lo = copy.deepcopy(_worker_pulse.a_v)
     clean_pulse = copy.deepcopy(_worker_pulse)
     
@@ -554,7 +559,7 @@ def run_single_iteration(iteration_index):
     noisy_pulse.a_v = noisy_input_v
     
     # Propagate the noisy pulse
-    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(noisy_pulse, _worker_mode, length=.003)
+    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(noisy_pulse, _worker_mode, length=.03)
     delta_a_v = a_v_out[-1] - _worker_a_v_clean_out # not sure if this step is necessary but it is technically isolating the noise fluctuations
     I_ref = np.sum(np.abs(a_v_out[-1])**2) * _worker_pulse.dv
     
@@ -562,7 +567,7 @@ def run_single_iteration(iteration_index):
         print(f'One iteration run time: {time.time() - s} s')
 
     # Return the results back to the main process
-    return I_ref, a_v_out[-1], a_v_out[0]
+    return I_ref, a_v_out[-1], pure_vacuum_v
 
 # # Running my methods:
 # pulse, mode, v_grid = setup_waveguide_and_pulse()
@@ -573,12 +578,12 @@ def run_single_iteration(iteration_index):
 # pulse_interference(a_v, new_pulse)
 
 # Simulations with injected noise:
-def sim_with_noise_parallel():
-    num_iter = 500 # You will likely need 100-1000+ to get clean variance statistics
+def sim_with_noise_parallel(gd):
+    num_iter = 100 # You will likely need 100-1000+ to get clean variance statistics
     
     # 1. Setup everything once
     print("Setting up mode and base pulse...")
-    base_pulse, mode, v_grid = setup_waveguide_and_pulse()
+    base_pulse, mode, v_grid = setup_waveguide_and_pulse(gd)
     
     # Run one sequential test iteration on the main thread
     print("Running diagnostic single iteration...")
@@ -592,13 +597,13 @@ def sim_with_noise_parallel():
     input_pulse.a_v = noisy_a_v_in 
     
     # Propagate the noisy pulse through the waveguide
-    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(input_pulse, mode, 0.003)
+    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(input_pulse, mode, 0.03)
     
     # Safely plot the results on the main thread
     # nice_plot(a_v_out, sim, new_pulse, a_t, z)
     plot_osa_spectrum(a_v_out, sim, new_pulse)
     # verify_vacuum_energy(base_pulse, v_grid, 1000)
-    # nonlin_phas_shift(a_t, new_pulse, mode, 0.003)
+    # nonlin_phas_shift(a_t, new_pulse, mode, 0.03)
     # pulse_interference(a_v_out, new_pulse)
     
     # Lists to store the complex overlap integrals
@@ -611,29 +616,21 @@ def sim_with_noise_parallel():
     max_cores = 2
 
     # Start the multiprocessing pool
-    with concurrent.futures.ProcessPoolExecutor(max_workers=max_cores, initializer=init_worker) as executor:
-        # Submit all tasks to the executor
-        # A list comprehension builds a list of "Futures" (pending tasks)
-        futures = [
-            executor.submit(run_single_iteration, i)
-            for i in range(num_iter)
-        ]
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max_cores, initializer=init_worker, initargs=(gd, )) as executor:
         
-        # As tasks finish (in any order), gather the results
-        for i, future in enumerate(concurrent.futures.as_completed(futures)):
-            try:
-                c_vac, c_sig, c_in = future.result()
+        # executor.map guarantees the output list matches the input sequence order
+        results = executor.map(run_single_iteration, range(num_iter))
+        
+        for i, (c_vac, c_sig, c_in) in enumerate(results):
                 overlaps_vacuum.append(c_vac)
                 overlaps_signal.append(c_sig)
                 overlaps_in.append(c_in)
                 print(f"Completed iteration {i+1}/{num_iter}")
-            except Exception as exc:
-                print(f"An iteration generated an exception: {exc}")
                 
     # Convert to numpy arrays
     overlaps_signal = np.array(overlaps_signal)
     overlaps_vacuum = np.array(overlaps_vacuum)
-    overlaps_in = np.array(overlaps_in)
+    overlaps_in = np.array(np.sum(np.abs(overlaps_in)**2, axis=1) * base_pulse.dv)
 
     # 2. Sweep the LO phase to find squeezing and anti-squeezing
     phases = np.linspace(0, 4*np.pi, 300)
@@ -660,18 +657,6 @@ def sim_with_noise_parallel():
 
             samples.append(I)
 
-        for field_in in overlaps_in:
-
-            aux = field_ratio * base_pulse.a_v * np.exp(1j*theta)
-
-            total_in = field_in + aux * .97
-
-            I_in = np.sum(
-                np.abs(total_in)**2
-            ) * base_pulse.dv
-
-            samples_in.append(I_in)
-
         var_signal.append(np.var(samples))
         var_in.append(np.var(samples_in))
 
@@ -681,46 +666,30 @@ def sim_with_noise_parallel():
     var_ref = np.var(overlaps_vacuum)
     print(f'var ref = {np.mean(var_ref)}')
 
-    var_measured = eta*var_signal + (1-eta)*var_ref
+    var_measured = eta*var_signal + (1-eta)*np.var(overlaps_in)  #var_ref
     print(f'var measured = {np.min(var_measured)}')
 
     squeezing_dB = 10*np.log10(
         var_measured/var_ref
     )
 
-    var_in = np.array(var_in)
-    print(f'var signal = {np.min(var_in)}')
-
-    var_ref = np.var(overlaps_vacuum)
-    print(f'var ref = {np.mean(var_ref)}')
-
-    var_measured_in = eta*var_in + (1-eta)*var_ref
-    print(f'var measured = {np.min(var_measured_in)}')
-
-    squeezing_dB_in = 10*np.log10(
-        var_measured_in/var_ref
-    )
-
     # 4. Plot the results
-    plt.figure(figsize=(8, 5))
-    plt.plot(phases, squeezing_dB, label='Output State Noise above SNL', color='indigo', linewidth=2)
-    plt.plot(phases, squeezing_dB_in, label='Shot Noise Variation', color='forestgreen', linewidth=2)
-    plt.axhline(0, color='k', linestyle='--', label='Shot Noise Limit (SNL)')
-    plt.xlabel('Local Oscillator Phase (rad)')
-    plt.ylabel('Quantum Noise Variance (dB)')
-    plt.title('Predicted Squeezing vs. LO Phase')
-    # plt.xlim(0, 2*np.pi)
-    plt.legend(loc='upper right')
-    plt.grid(True)
-    plt.show()
+    # plt.figure(figsize=(8, 5))
+    # plt.plot(phases, squeezing_dB, label='Output State Noise above SNL', color='indigo', linewidth=2)
+    # # plt.plot(phases, squeezing_dB_in, label='Shot Noise Variation', color='forestgreen', linewidth=2)
+    # plt.axhline(0, color='k', linestyle='--', label='Shot Noise Limit (SNL)')
+    # plt.xlabel('Local Oscillator Phase (rad)')
+    # plt.ylabel('Quantum Noise Variance (dB)')
+    # plt.title('Predicted Squeezing vs. LO Phase')
+    # # plt.xlim(0, 2*np.pi)
+    # plt.legend(loc='upper right')
+    # plt.grid(True)
+    # plt.show()
     
     print(f"Maximum Squeezing: {np.min(squeezing_dB):.2f} dB")
     print(f"Maximum Anti-Squeezing: {np.max(squeezing_dB):.2f} dB")
 
-    print(f"Maximum SNL Variation: {np.min(squeezing_dB_in):.2f} dB")
-    print(f"Maximum SNL Variation: {np.max(squeezing_dB_in):.2f} dB")
-
-    return phases, squeezing_dB
+    return var_measured, var_ref, var_signal, phases
 
 # --- Execution Block ---
 if __name__ == '__main__':
@@ -729,7 +698,33 @@ if __name__ == '__main__':
     os.environ["OMP_NUM_THREADS"] = "1"
     
     start_time = time.time()
-    overlaps_signal, overlaps_vacuum = sim_with_noise_parallel()
+    var_baseline, var_base_ref, _, _ = sim_with_noise_parallel(0)
+    var_measured, var_ref, var_signal, phases = sim_with_noise_parallel(1)
+
+    squeezing_dB = 10*np.log10(
+        var_measured/var_ref
+    )
+
+    squeezing_dB_snl = 10*np.log10(
+        var_baseline/var_base_ref
+    )
+    sqz_dB_offset = np.mean(squeezing_dB_snl)
+
+    plt.figure(figsize=(8, 5))
+    plt.plot(phases, squeezing_dB - sqz_dB_offset, label='Output State Noise above SNL', color='indigo', linewidth=2)
+    plt.plot(phases, squeezing_dB_snl - sqz_dB_offset, label='Shot Noise Variation', color='forestgreen', linewidth=2)
+    plt.axhline(0, color='k', linestyle='--', label='Shot Noise Limit (SNL)')
+    plt.xlabel('Local Oscillator Phase (rad)')
+    plt.ylabel('Quantum Noise Variance (dB)')
+    plt.title('Predicted Squeezing vs. LO Phase')
+    # plt.xlim(0, 2*np.pi)
+    plt.legend(loc='upper right')
+    plt.grid(True)
+    plt.show()
+
+    print(f"Maximum Squeezing: {np.min(squeezing_dB - sqz_dB_offset):.2f} dB")
+    print(f"Maximum Anti-Squeezing: {np.max(squeezing_dB - sqz_dB_offset):.2f} dB")
+
     end_time = time.time()
     print(f'Total run time = {(end_time - start_time):.2f} s')
 
