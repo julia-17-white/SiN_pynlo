@@ -603,7 +603,7 @@ def sim_with_noise_parallel(gamma, D):
     # Convert to numpy arrays
     overlaps_signal = np.array(overlaps_signal)
     overlaps_vacuum = np.array(overlaps_vacuum)
-    delta_a_v = np.array(np.sum(np.abs(delta_a_v)**2) * base_pulse.dv)
+    delta_a_v = np.array(np.sum(np.abs(delta_a_v)**2, axis=1) * base_pulse.dv)
 
     # 2. Sweep the LO phase to find squeezing and anti-squeezing
     phases = np.linspace(0, 4*np.pi, 100)
@@ -648,7 +648,9 @@ def sim_with_noise_parallel(gamma, D):
     print(f'maximum of reference variance: {np.max(var_ref)}')
     print(f'minimum of reference variance: {np.min(var_ref)}')
 
-    var_measured = eta*var_signal + (1-eta)*var_ref #*np.var(delta_a_v)
+    var_measured = eta*var_signal + (1-eta)*np.var(delta_a_v)
+    print(f'vacuum variance: {np.var(delta_a_v)}')
+    # var_ref = eta*var_ref + (1-eta)*np.var(delta_a_v)
     print(f'maximum of measured variance: {np.max(var_measured)}')
     print(f'minimum of measured variance: {np.min(var_measured)}')
 
@@ -727,10 +729,11 @@ if __name__ == '__main__':
     squeezing_dB_snl = 10*np.log10(
         var_baseline/var_base_ref
     )
+    sqz_dB_offset = np.mean(squeezing_dB_snl)
 
     plt.figure(figsize=(8, 5))
-    plt.plot(phases, squeezing_dB, label='Output State Noise', color='indigo', linewidth=2)
-    plt.plot(phases, squeezing_dB_snl, label='Shot Noise Variation', color='forestgreen', linewidth=2)
+    plt.plot(phases, squeezing_dB - sqz_dB_offset, label='Output State Noise', color='indigo', linewidth=2)
+    plt.plot(phases, squeezing_dB_snl - sqz_dB_offset, label='Shot Noise Variation', color='forestgreen', linewidth=2)
     plt.axhline(0, color='k', linestyle='--', label='Shot Noise Limit (0 dB)')
     plt.xlabel('Local Oscillator Phase (rad)')
     plt.ylabel('Quantum Noise Variance (dB)')
@@ -740,8 +743,8 @@ if __name__ == '__main__':
     plt.grid(True)
     plt.show()
     
-    print(f"Maximum Squeezing: {np.min(squeezing_dB):.2f} dB")
-    print(f"Maximum Anti-Squeezing: {np.max(squeezing_dB):.2f} dB")
+    print(f"Maximum Squeezing: {np.min(squeezing_dB - sqz_dB_offset):.2f} dB")
+    print(f"Maximum Anti-Squeezing: {np.max(squeezing_dB - sqz_dB_offset):.2f} dB")
 
 
     end_time = time.time()
