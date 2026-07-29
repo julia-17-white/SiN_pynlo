@@ -53,10 +53,6 @@ def setup_waveguide_and_pulse(gd):
     coup_loss_perc = 10.0 ** (-coup_loss / 10.0)
 
     n_points = 2**13 # 20 for sidebands
-
-    # pulse = pynlo.light.Pulse.Sech(n_points, v_min, v_max, v0, e_p, t_fwhm)
-    
-    # v_grid = pulse.v_grid
     
     pulse = fiber_sim.nd_run()
     pulse.a_v = pulse.a_v * fib_loss * coup_loss_perc
@@ -131,7 +127,7 @@ def setup_waveguide_and_pulse(gd):
     alpha_val_per_m = (0.1 / 10.0) * np.log(10) / length
     alpha_v = np.full_like(v_grid, alpha_val_per_m) # including loss
 
-    mode = pynlo.medium.Mode(v_grid, beta_v, alpha = None, g3=g3_v)
+    mode = pynlo.medium.Mode(v_grid, beta_v, alpha = alpha_v, g3=g3_v)
     # --- Verify Dispersion
     print('')
     beta2 = mode.beta2
@@ -507,6 +503,16 @@ def inject_noise(a_v, v_grid, pulse, local_rng):
     return a_v + (a_v_noise * complex_noise)
 
 def verify_vacuum_energy(pulse, v_grid, N=1000):
+    '''
+    Method intended to check if inject_noise() is working properly by verifying the vacuum energy's levels.
+    Params:
+        pulse: Used to obtain the dv frequency steps.
+        v_grid: the frequency grid.
+        N: the number of iterations.
+    Returns:
+        None ; plots my result divided by the expected to verify that it's close to one.
+    '''
+
 
     energies = np.zeros_like(v_grid)
 
@@ -540,6 +546,18 @@ def verify_vacuum_energy(pulse, v_grid, N=1000):
 
 
 def run_single_iteration(iteration_index):
+    '''
+    Method to run one iteration of my Monte-Carlo simulations. It uses the global variables defined in init_worker(),
+    injects noise and propagates the pulse while also claculating the vacuum noise and
+    the intensity of the beam on the detector for the shot noise.
+    Params:
+        iteration_index: which iteration I am on so I can generate the correct random number and obtain reproducible results.
+    Returns:
+        I_ref: the intensity of the output beam of the waveguide on the detector. This is what is used to calculate the shot noise.
+        a_v_out[-1]: the output EM spectrum from the waveguide.
+        pure_vaccum_v: the vacuum noise which will be used in the detector loss.
+    '''
+
     if iteration_index == 2:
         s = time.time()
 
@@ -569,16 +587,22 @@ def run_single_iteration(iteration_index):
     # Return the results back to the main process
     return I_ref, a_v_out[-1], pure_vacuum_v
 
-# # Running my methods:
-# pulse, mode, v_grid = setup_waveguide_and_pulse()
-# new_pulse, z, a_t, a_v, sim, v_grid = propagate_pulse(pulse, mode, 0.01)
-# noise_pulse = inject_noise(a_v, v_grid, pulse)
-# nice_plot(a_v, sim, new_pulse, a_t)
-# nonlin_phas_shift(a_t, new_pulse)
-# pulse_interference(a_v, new_pulse)
+
 
 # Simulations with injected noise:
 def sim_with_noise_parallel(gd):
+    '''
+    Method that runs the main pulse propagation to variance readout on 2 cores.
+    It runs an initial propagation where you can create diagnostic plots before doing the multi-core variance propagations and readout.
+    Params:
+        gd: Defined to be zero for the interference readout and anything else for the standard shot noise readout.
+    Returns:
+        var_measured: The variance of the signal beam with the interference with the LO that accounts for detection loss.
+        var_ref: The variance of the shot noise.
+        var_signal: The variance of the signal beam with the interference with the LO.
+        phases: The phase array I scanned through.
+    '''
+
     num_iter = 100 # You will likely need 100-1000+ to get clean variance statistics
     
     # 1. Setup everything once
@@ -649,7 +673,7 @@ def sim_with_noise_parallel(gd):
 
             aux = field_ratio * base_pulse.a_v * np.exp(1j*theta)
 
-            total = field + aux * .97
+            total = field + aux * .97 # .97 accounts for the lack of spatial overlap
 
             I = np.sum(
                 np.abs(total)**2
@@ -667,24 +691,12 @@ def sim_with_noise_parallel(gd):
     print(f'var ref = {np.mean(var_ref)}')
 
     var_measured = eta*var_signal + (1-eta)*np.var(overlaps_in)  #var_ref
+    var_ref = eta*var_ref + (1-eta)*np.var(overlaps_in)  #var_ref
     print(f'var measured = {np.min(var_measured)}')
 
     squeezing_dB = 10*np.log10(
         var_measured/var_ref
     )
-
-    # 4. Plot the results
-    # plt.figure(figsize=(8, 5))
-    # plt.plot(phases, squeezing_dB, label='Output State Noise above SNL', color='indigo', linewidth=2)
-    # # plt.plot(phases, squeezing_dB_in, label='Shot Noise Variation', color='forestgreen', linewidth=2)
-    # plt.axhline(0, color='k', linestyle='--', label='Shot Noise Limit (SNL)')
-    # plt.xlabel('Local Oscillator Phase (rad)')
-    # plt.ylabel('Quantum Noise Variance (dB)')
-    # plt.title('Predicted Squeezing vs. LO Phase')
-    # # plt.xlim(0, 2*np.pi)
-    # plt.legend(loc='upper right')
-    # plt.grid(True)
-    # plt.show()
     
     print(f"Maximum Squeezing: {np.min(squeezing_dB):.2f} dB")
     print(f"Maximum Anti-Squeezing: {np.max(squeezing_dB):.2f} dB")
@@ -708,11 +720,11 @@ if __name__ == '__main__':
     squeezing_dB_snl = 10*np.log10(
         var_baseline/var_base_ref
     )
-    sqz_dB_offset = np.mean(squeezing_dB_snl)
+    # sqz_dB_offset = np.mean(squeezing_dB_snl)
 
     plt.figure(figsize=(8, 5))
-    plt.plot(phases, squeezing_dB - sqz_dB_offset, label='Output State Noise above SNL', color='indigo', linewidth=2)
-    plt.plot(phases, squeezing_dB_snl - sqz_dB_offset, label='Shot Noise Variation', color='forestgreen', linewidth=2)
+    plt.plot(phases, squeezing_dB, label='Output State Noise above SNL', color='indigo', linewidth=2)
+    plt.plot(phases, squeezing_dB_snl, label='Shot Noise Variation', color='forestgreen', linewidth=2)
     plt.axhline(0, color='k', linestyle='--', label='Shot Noise Limit (SNL)')
     plt.xlabel('Local Oscillator Phase (rad)')
     plt.ylabel('Quantum Noise Variance (dB)')
@@ -722,87 +734,9 @@ if __name__ == '__main__':
     plt.grid(True)
     plt.show()
 
-    print(f"Maximum Squeezing: {np.min(squeezing_dB - sqz_dB_offset):.2f} dB")
-    print(f"Maximum Anti-Squeezing: {np.max(squeezing_dB - sqz_dB_offset):.2f} dB")
+    print(f"Maximum Squeezing: {np.min(squeezing_dB):.2f} dB")
+    print(f"Maximum Anti-Squeezing: {np.max(squeezing_dB):.2f} dB")
 
     end_time = time.time()
     print(f'Total run time = {(end_time - start_time):.2f} s')
 
-
-
-    
-
-#%% Adding in Julia's Plots:
-# t = pulse.t_grid
-# I_out = np.abs(a_t[-1])**2
-
-# plt.plot(t*1e12, I_out)
-# plt.axhline(0, color='k')
-# plt.xlabel("Time (ps)")
-# plt.ylabel("Intensity")
-# plt.title("Output temporal profile")
-# plt.show()
-# plt.plot(t*1e12, I_out)
-# plt.axhline(0, color='k')
-# plt.xlabel("Time (ps)")
-# plt.ylabel("Intensity")
-# plt.title("Output temporal profile")
-# plt.show()
-
-# margin = 0.1 * np.ptp(pulse.t_grid)
-# edge_mask = np.abs(pulse.t_grid) > (np.ptp(pulse.t_grid)/2 - margin)
-
-# print("Max edge intensity:",
-#       np.max(I_out[edge_mask]) / np.max(I_out))
-
-# # print(f'length of the array = {len(a_t)}')
-
-# # Temporal field
-# a_t = pulse.a_t
-# t = pulse.t_grid * 1e12  # ps
-
-# I_t = np.abs(a_t)**2
-# phase_t = np.unwrap(np.angle(a_t))
-
-# # Mask low-intensity regions (e.g. below -40 dB)
-# mask_t = I_t > I_t.max() * 1e-4
-
-# # Spectral field
-# dt = pulse.t_grid[1] - pulse.t_grid[0]
-
-# # FFT with correct centering
-# a_w = np.fft.fftshift(np.fft.fft(np.fft.ifftshift(a_t))) * dt
-# v = pulse.v_grid * 1e-12  # THz
-
-# I_w = np.abs(a_w)**2
-# phase_w = np.unwrap(np.angle(a_w))
-
-# Mask weak spectral components
-# mask_w = I_w > I_w.max() * 1e-4
-
-# plt.figure()
-# plt.plot(t[mask_t], phase_t[mask_t])
-# plt.xlabel("Time (ps)")
-# plt.ylabel("Phase (rad)")
-# plt.title("Temporal phase")
-# plt.grid(True)
-
-# plt.figure()
-# plt.plot(v[mask_w], phase_w[mask_w])
-# plt.xlabel("Frequency (THz)")
-# plt.ylabel("Phase (rad)")
-# plt.title("Spectral phase")
-# plt.grid(True)
-# plt.show()
-
-# # Remove linear phase (fit and subtract)
-# p = np.polyfit(v[mask_w], phase_w[mask_w], 1)
-# phase_w_rel = phase_w - np.polyval(p, v)
-
-# plt.figure()
-# plt.plot(v[mask_w], phase_w_rel[mask_w])
-# plt.xlabel("Frequency (THz)")
-# plt.ylabel("Residual phase (rad)")
-# plt.title("Spectral phase (carrier removed)")
-# plt.grid(True)
-# plt.show()
