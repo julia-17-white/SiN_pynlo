@@ -58,6 +58,7 @@ def setup_waveguide_and_pulse(gd):
     pulse.a_v = pulse.a_v * fib_loss * coup_loss_perc
     print("Frq Res: {:.3g} GHz".format(pulse.dv * 1e-9))
     v_grid = pulse.v_grid
+    # print(f'v_grid length = {len(v_grid)}')
 
     T0 = t_fwhm / 1.763
     P0_expected = e_p / (2*T0)
@@ -633,7 +634,7 @@ def sim_with_noise_parallel(gd):
     # Lists to store the complex overlap integrals
     overlaps_signal = []
     overlaps_vacuum = []
-    overlaps_in = []
+    overlaps_snl = []
     
     print(f"Starting parallel simulation with {num_iter} iterations...")
     # Use >4 cores (leaving the rest of my PC free so it doesn't freeze up)
@@ -645,21 +646,20 @@ def sim_with_noise_parallel(gd):
         # executor.map guarantees the output list matches the input sequence order
         results = executor.map(run_single_iteration, range(num_iter))
         
-        for i, (c_vac, c_sig, c_in) in enumerate(results):
+        for i, (c_snl, c_sig, c_vac) in enumerate(results):
                 overlaps_vacuum.append(c_vac)
                 overlaps_signal.append(c_sig)
-                overlaps_in.append(c_in)
+                overlaps_snl.append(c_snl)
                 print(f"Completed iteration {i+1}/{num_iter}")
                 
     # Convert to numpy arrays
     overlaps_signal = np.array(overlaps_signal)
-    overlaps_vacuum = np.array(overlaps_vacuum)
-    overlaps_in = np.array(np.sum(np.abs(overlaps_in)**2, axis=1) * base_pulse.dv)
+    overlaps_snl = np.array(overlaps_snl)
+    overlaps_vacuum = np.array(np.sum(np.abs(overlaps_vacuum)**2, axis=1) * base_pulse.dv)
 
     # 2. Sweep the LO phase to find squeezing and anti-squeezing
     phases = np.linspace(0, 4*np.pi, 300)
     var_signal = []
-    var_in = []
     eta = 0.78
 
     field_ratio = np.sqrt(150e-6/14.7e-3)
@@ -667,7 +667,6 @@ def sim_with_noise_parallel(gd):
     for theta in phases:
 
         samples = []
-        samples_in = []
 
         for field in overlaps_signal:
 
@@ -682,7 +681,6 @@ def sim_with_noise_parallel(gd):
             samples.append(I)
 
         var_signal.append(np.var(samples))
-        var_in.append(np.var(samples_in))
 
     var_signal = np.array(var_signal)
     print(f'var signal = {np.min(var_signal)}')
@@ -690,8 +688,8 @@ def sim_with_noise_parallel(gd):
     var_ref = np.var(overlaps_vacuum)
     print(f'var ref = {np.mean(var_ref)}')
 
-    var_measured = eta*var_signal + (1-eta)*np.var(overlaps_in)  #var_ref
-    var_ref = eta*var_ref + (1-eta)*np.var(overlaps_in)  #var_ref
+    var_measured = eta*var_signal + (1-eta)*np.var(overlaps_vacuum)  #var_ref
+    var_ref = eta*var_ref + (1-eta)*np.var(overlaps_vacuum)  #var_ref
     print(f'var measured = {np.min(var_measured)}')
 
     squeezing_dB = 10*np.log10(
