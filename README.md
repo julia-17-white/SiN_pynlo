@@ -2,23 +2,29 @@
 This script serves the purpose to take dimensions of a waveguide and use them to generate a mode file.
 In generating the mode file, I calculate the effective index and nonlinear parameter $\gamma$ for given wavelengths.
 
+### Fiber Simulation:
+This script takes the soliton out of the oscillator in our Menhir comb and applies the nonlinear effects of the PM-1550 in the laser and that couples out of the laser as well as the ND fiber that is used to compress the pulse back to being near the foueier-transform limit. This is done in `fiber_sim`'s `nd_run()` method and the results are a close match to the laser spectrum we see out of these fibers. The results are also verified to match the results in the GUI written by Xiangwen Gao for all fiber simulation in our group.
+
 ### Mode Calculations:
-_Fill this in_
+These use [EMpy](https://github.com/lbolla/EMpy/tree/master) and were provided by Abijith Kowligy. 
+_Fill this in and understand these more_
 
 ### Single Propagation:
-_Fill this in_
+The waveguide mode is created from the mode file generated in `mode_match.py` and the pulse is the output from the `fiber_sim.nd_run()` method. From the mode file, I create a gamma and n_eff spline. The indices of refraction are used to calculate the dispersion `beta_v` and the nonlinearity gamma is used to calculate my third order nonlinear coupling `g3_v`. These then create the PyNLO mode and using `sim.simulate()`, I can propagate the pulse through this mode. There are a few methods that allow me to further analyze this output pulse:
+* `nice_plot()` produces the standard time and frequency domain plots of the input and output pulse as well as its propagation through the waveguide.
+* `plot_osa_spectrum()` produces a plot of the input and output pulses in dBm/nm and over wavelength. This matches the standard OSA readout.
+* `pulse_interference()` produces a plot of the two pulses used as parameters as well as their interference based on addition.
 
-These output were verified with the Octave Photonics waveguide propagation GUI and with Thomas Charland's MatLab code. 
 
-These outputs have been verified with the experiment and match pretty well.
-_To do:_ add this info here
+I verified my PyNLO outputs with the Octave Photonics waveguide propagation GUI and with Thomas Charland's MatLab code. These outputs also match the spectral outputs I see from my waveugides quite well.
+
 
 ### Noise Injection:
 [Paschotta's Noise of MLLs Part 1](https://link.springer.com/article/10.1007/s00340-004-1547-x) discusses that my frequency resolution should be $\delta v = 1/T$ where $T$ is the temporal range. By default pynlo's `dv` is the "frequency step size. This is equal to the reciprocal of the time window." This matches the Paschotta definition. Pynlo also uses `a_v` which is the "root power spectrum" so the total energy is $E = \sum \left|a_v\right|^2 \text{d}v$. This means that I can find the noise amplitude for a given pulse by with $a_{v,noise} = \sqrt{\frac{.5 h v}{\text{d}v}}$. This noise is then multiplied by some injected complex noise and added to the original pulse so it workes as the magnitude of the noise added to the pulse.
 
 The injected complex noise is found by generating two sets of Gaussian noise with a mean of zero and a standard deviation of one. These are then cast together as complex noise using $n = \frac{1}{\sqrt{2}}\left(n_{real} + i n_{complex}\right)$. This complex noise is then multiplied by the noise amplitude for the given pulse $a_{v,noise}$ and added to the original pulse.
 
-_to do:_ see how implementing a proper poissonian distribution changes your results
+I believe that I shouldn't need to implement a proper Poissonian distribution here because my Normal distribution has `len(v_grid)` which is the length of the PyNLO pulse's frequency grid which has $N \approx 8000$.
 
 ### Squeezing Search:
 This squeezing search occurs in a number of steps.
