@@ -531,6 +531,34 @@ def run_single_iteration(iteration_index):
 # nonlin_phas_shift(a_t, new_pulse)
 # pulse_interference(a_v, new_pulse)
 
+def calculate_peak_offset(phase, power1, power2):
+    '''
+    to calculate the phase offset of my squeezing curve vs the interference curve.
+    Params:
+        phase: my theta array
+        power1: the squeezing_dB array
+        power2: the constructive interference array
+    Resturns:
+        phase1 - phase2: the phase offset of the first two peaks of the arrays
+    '''
+
+    # 1. Mask to the first period to avoid massive out-of-bounds peaks
+    mask = (phase >= 0) & (phase <= 2 * np.pi)
+    phase_window = phase[mask]
+    
+    # 2. Find the peaks
+    idx1 = np.argmax(power1[mask])
+    idx2 = np.argmax(power2[mask])
+    
+    # 3. Calculate raw difference
+    raw_offset = phase_window[idx1] - phase_window[idx2]
+    
+    # 4. Wrap the difference to always find the shortest path (-pi to pi)
+    period = 2 * np.pi
+    shortest_offset = (raw_offset + np.pi) % period - np.pi
+    
+    return shortest_offset
+
 # Simulations with injected noise:
 def sim_with_noise_parallel(gamma, D):
     num_iter = 100 # You will likely need 100-1000+ to get clean variance statistics
@@ -729,7 +757,9 @@ if __name__ == '__main__':
     squeezing_dB_snl = 10*np.log10(
         var_baseline/var_base_ref
     )
-    sqz_dB_offset = np.mean(squeezing_dB_snl)
+    sqz_dB_offset = 0 #np.mean(squeezing_dB_snl)
+    phase_diff = calculate_peak_offset(phases, squeezing_dB, squeezing_dB_snl)
+    print(f'Phase Offset = {phase_diff}')
 
     plt.figure(figsize=(8, 5))
     plt.plot(phases, squeezing_dB - sqz_dB_offset, label='Output State Noise', color='indigo', linewidth=2)
