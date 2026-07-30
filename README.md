@@ -6,8 +6,8 @@ In generating the mode file, I calculate the effective index and nonlinear param
 This script takes the soliton out of the oscillator in our Menhir comb and applies the nonlinear effects of the PM-1550 in the laser and that couples out of the laser as well as the ND fiber that is used to compress the pulse back to being near the foueier-transform limit. This is done in `fiber_sim`'s `nd_run()` method and the results are a close match to the laser spectrum we see out of these fibers. The results are also verified to match the results in the GUI written by Xiangwen Gao for all fiber simulation in our group.
 
 ### Mode Calculations:
-These use [EMpy](https://github.com/lbolla/EMpy/tree/master) and were provided by Abijith Kowligy. 
-_Fill this in and understand these more_
+These use the [EMpy](https://github.com/lbolla/EMpy/tree/master) VFD mode solver and were provided by Abijith Kowligy. 
+
 
 ### Single Propagation:
 The waveguide mode is created from the mode file generated in `mode_match.py` and the pulse is the output from the `fiber_sim.nd_run()` method. From the mode file, I create a gamma and n_eff spline. The indices of refraction are used to calculate the dispersion `beta_v` and the nonlinearity gamma is used to calculate my third order nonlinear coupling `g3_v`. These then create the PyNLO mode and using `sim.simulate()`, I can propagate the pulse through this mode. There are a few methods that allow me to further analyze this output pulse:
