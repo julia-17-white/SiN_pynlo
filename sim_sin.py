@@ -650,7 +650,7 @@ def sim_with_noise_parallel(gamma, D):
 
     var_measured = eta*var_signal + (1-eta)*np.var(delta_a_v)
     print(f'vacuum variance: {np.var(delta_a_v)}')
-    # var_ref = eta*var_ref + (1-eta)*np.var(delta_a_v)
+    var_ref = eta*var_ref + (1-eta)*np.var(delta_a_v)
     print(f'maximum of measured variance: {np.max(var_measured)}')
     print(f'minimum of measured variance: {np.min(var_measured)}')
 
