@@ -30,12 +30,13 @@ import concurrent.futures
 import time
 import fiber_sim
 import glob
+import itertools
 
 # from pynlo.medium import RamanResponse
 # from pynlo.utility import fft
 
 
-def setup_waveguide_and_pulse(gd, file):
+def setup_waveguide_and_pulse(gd, file, length, fin_data):
     '''
     Creates the base pulse and waveguide that will be used.
     Params:
@@ -125,7 +126,6 @@ def setup_waveguide_and_pulse(gd, file):
     g3_v = pynlo.utility.chi3.gamma_to_g3(v_grid, gamma_spline(v_grid))
 
     #---- Mode
-    length = 0.03
     alpha_val_per_m = (0.1 / 10.0) * np.log(10) / length
     alpha_v = np.full_like(v_grid, alpha_val_per_m) # including loss
 
@@ -238,7 +238,7 @@ def nice_plot(a_v, sim, pulse, a_t, z):
 
     ax0.set_ylabel('Intensity (arb.)')
     ax2.set_ylabel('Length (mm)', labelpad = 20)
-    plt.show()
+    # plt.show()
 
 
 def plot_osa_spectrum(a_v, sim, pulse):
@@ -301,7 +301,7 @@ def plot_osa_spectrum(a_v, sim, pulse):
     plt.legend(fontsize=12)
     plt.grid(True)
     plt.tight_layout()
-    plt.show()
+    # plt.show()
 
 
 def nonlin_phas_shift(a_t, pulse, mode, length=0.03):
@@ -355,14 +355,14 @@ def nonlin_phas_shift(a_t, pulse, mode, length=0.03):
 
     plt.title("True Nonlinear Phase Shift (Linear Chirp Polyminial Subtracted)")
     fig.tight_layout()
-    plt.show()
+    # plt.show()
 
     print(f"True isolated nonlinear phase shift at the peak: {phase_pure_nonlinear[peak_idx]:.2f} rad")
 
 
 # Creating a second pulse and interfering the two pulses
 
-def pulse_interference(a_v, pulse):
+def pulse_interference(a_v, pulse, pwr_ratio):
     '''
     Create a new un-propagated LO pulse and interfere it with the pulse that has propagated through the waveguide 
     to simulate homodyne detection with a single detector.
@@ -398,7 +398,7 @@ def pulse_interference(a_v, pulse):
     # and a_v_aux is the newly created auxiliary pulse object
     # I'll create it here
 
-    e_p_aux = e_p/100
+    e_p_aux = e_p * pwr_ratio
     pulse_aux = pynlo.light.Pulse.Sech(n_points, v_min, v_max, v0, e_p_aux, t_fwhm)
     a_v_aux = inject_noise(pulse_aux.a_v, pulse_aux.v_grid, pulse_aux, local_rng=np.random.default_rng(seed_value - 1))
     # a_v_aux = noisy_aux.a_v
@@ -440,7 +440,7 @@ def pulse_interference(a_v, pulse):
     # plt.ylim(-40, 5)
     plt.grid(True)
     plt.legend()
-    plt.show()
+    # plt.show()
 
 
 # Global placeholders that will live inside each separate worker core process
@@ -449,7 +449,7 @@ _worker_mode = None
 _worker_v_grid = None
 _worker_a_v_lo = None
 
-def init_worker(gd, file):
+def init_worker(gd, file, length, fin_data):
     """
     This runs once on each CPU core when the process pool spawns.
     It initializes the un-picklable pynlo objects locally on that core.
@@ -457,13 +457,13 @@ def init_worker(gd, file):
     global _worker_pulse, _worker_mode, _worker_v_grid, _worker_a_v_lo, _worker_a_v_clean_out
     
     # Generate the base pulse and mode directly on this core
-    _worker_pulse, _worker_mode, _worker_v_grid = setup_waveguide_and_pulse(gd, file)
+    _worker_pulse, _worker_mode, _worker_v_grid = setup_waveguide_and_pulse(gd, file, length, fin_data)
     _worker_a_v_lo = copy.deepcopy(_worker_pulse.a_v)
     clean_pulse = copy.deepcopy(_worker_pulse)
     
     # Generate the clean Local Oscillator profile directly on this core
     print("Calculating clean LO pulse on each core...")
-    _, _, _, a_v_clean, _ = propagate_pulse(clean_pulse, _worker_mode)
+    _, _, _, a_v_clean, _ = propagate_pulse(clean_pulse, _worker_mode, length)
     _worker_a_v_clean_out = a_v_clean[-1]
 
 
@@ -544,10 +544,10 @@ def verify_vacuum_energy(pulse, v_grid, N=1000):
     plt.ylabel("Measured / Expected")
     plt.title("Vacuum Energy Verification")
     plt.grid()
-    plt.show()
+    # plt.show()
 
 
-def run_single_iteration(iteration_index):
+def run_single_iteration(iteration_index, length):
     '''
     Method to run one iteration of my Monte-Carlo simulations. It uses the global variables defined in init_worker(),
     injects noise and propagates the pulse while also claculating the vacuum noise and
@@ -579,7 +579,7 @@ def run_single_iteration(iteration_index):
     noisy_pulse.a_v = noisy_input_v
     
     # Propagate the noisy pulse
-    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(noisy_pulse, _worker_mode, length=.03)
+    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(noisy_pulse, _worker_mode, length)
     delta_a_v = a_v_out[-1] - _worker_a_v_clean_out # not sure if this step is necessary but it is technically isolating the noise fluctuations
     I_ref = np.sum(np.abs(a_v_out[-1])**2) * _worker_pulse.dv
     
@@ -589,10 +589,31 @@ def run_single_iteration(iteration_index):
     # Return the results back to the main process
     return I_ref, a_v_out[-1], pure_vacuum_v
 
+def calculate_peak_offset(phase, power1, power2):
+    '''
+    to calculate the phase offset of my squeezing curve vs the interference curve.
+    Params:
+        phase: my theta array
+        power1: the squeezing_dB array
+        power2: the constructive interference array
+    Resturns:
+        phase1 - phase2: the phase offset of the first two peaks of the arrays
+    '''
+
+    # Find the index of the maximum power for both curves
+    idx1 = np.argmax(power1)
+    idx2 = np.argmax(power2)
+    
+    # Find the corresponding phase values
+    phase1 = phase[idx1]
+    phase2 = phase[idx2]
+    
+    # Calculate the difference
+    return phase1 - phase2
 
 
 # Simulations with injected noise:
-def sim_with_noise_parallel(gd, file):
+def sim_with_noise_parallel(gd, file, length, pwr_ratio, fin_data):
     '''
     Method that runs the main pulse propagation to variance readout on 2 cores.
     It runs an initial propagation where you can create diagnostic plots before doing the multi-core variance propagations and readout.
@@ -605,11 +626,11 @@ def sim_with_noise_parallel(gd, file):
         phases: The phase array I scanned through.
     '''
 
-    num_iter = 10 # You will likely need 100-1000+ to get clean variance statistics
+    num_iter = 30 # You will likely need 100-1000+ to get clean variance statistics
     
     # 1. Setup everything once
     print("Setting up mode and base pulse...")
-    base_pulse, mode, v_grid = setup_waveguide_and_pulse(gd, file)
+    base_pulse, mode, v_grid = setup_waveguide_and_pulse(gd, file, length, fin_data)
     
     # Run one sequential test iteration on the main thread
     print("Running diagnostic single iteration...")
@@ -623,7 +644,7 @@ def sim_with_noise_parallel(gd, file):
     input_pulse.a_v = noisy_a_v_in 
     
     # Propagate the noisy pulse through the waveguide
-    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(input_pulse, mode, 0.03)
+    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(input_pulse, mode, length)
     
     # Safely plot the results on the main thread
     # nice_plot(a_v_out, sim, new_pulse, a_t, z)
@@ -642,10 +663,10 @@ def sim_with_noise_parallel(gd, file):
     max_cores = 2
 
     # Start the multiprocessing pool
-    with concurrent.futures.ProcessPoolExecutor(max_workers=max_cores, initializer=init_worker, initargs=(gd, file)) as executor:
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max_cores, initializer=init_worker, initargs=(gd, file, length, fin_data)) as executor:
         
         # executor.map guarantees the output list matches the input sequence order
-        results = executor.map(run_single_iteration, range(num_iter))
+        results = executor.map(run_single_iteration, range(num_iter), itertools.repeat(length))
         
         for i, (c_snl, c_sig, c_vac) in enumerate(results):
                 overlaps_vacuum.append(c_vac)
@@ -663,7 +684,8 @@ def sim_with_noise_parallel(gd, file):
     var_signal = []
     eta = 0.78
 
-    field_ratio = np.sqrt(150e-6/14.7e-3)
+    # pwr_ratio = np.sqrt(150e-6/14.7e-3)
+
 
     for theta in phases:
 
@@ -671,7 +693,7 @@ def sim_with_noise_parallel(gd, file):
 
         for field in overlaps_signal:
 
-            aux = field_ratio * base_pulse.a_v * np.exp(1j*theta)
+            aux = np.sqrt(pwr_ratio) * base_pulse.a_v * np.exp(1j*theta)
 
             total = field + aux * .97 # .97 accounts for the lack of spatial overlap
 
@@ -686,7 +708,7 @@ def sim_with_noise_parallel(gd, file):
     var_signal = np.array(var_signal)
     print(f'var signal = {np.min(var_signal)}')
 
-    var_ref = np.var(overlaps_vacuum)
+    var_ref = np.var(overlaps_snl)
     print(f'var ref = {np.mean(var_ref)}')
 
     var_measured = eta*var_signal + (1-eta)*np.var(overlaps_vacuum)  #var_ref
@@ -704,16 +726,29 @@ def sim_with_noise_parallel(gd, file):
 
 
 def main():
-    widths = ['800', '1000', '1200', '1400', '1600', '1800', '2000', '2200', '2400', '2600', '2800', '3000', '3200', '3400', '3600',
-              '3800', '4000', '4200', '4400', '4600', '4800', '5000']
+    # widths = ['800', '1000', '1200', '1400', '1600', '1800', '2000', '2200', '2400', '2600', '2800', '3000', '3200', '3400', '3600',
+    #           '3800', '4000', '4200', '4400', '4600', '4800', '5000']
+    widths = ['1400', '1600']
     file_path1 = 'from_abijith/jw_modes/JW_SiN_O2Clad_800nmThickness_' 
     file_path2 = 'nmWidth_gamma_aeff.npy'
+
+    length = .003 #m
+    pwr_ratio = .01
 
     # It is highly recommended to disable OpenMP threading when using ProcessPoolExecutor
     # so threads and processes don't fight for CPU time.
     os.environ["OMP_NUM_THREADS"] = "1"
 
+    fin_data = {'width':[], 'beta_2 at peak': [], 'average beta2': [], 'gamma at peak': [], 'average gamma': [],
+                'number of soliton periods':[], 'N^2': [], 'phi_nonlin': [], 'dB squeezing': [],
+                'dB anti-squeezing': [], 'dB constructive interference': [], 'dB destructive interference': [],
+                'phase offset': []}
+
+
     for width in widths:
+        start_time = time.time()
+        fin_data['width'].append(width)
+
         print('')
         print('*'*50)
         print('')
@@ -721,17 +756,20 @@ def main():
 
         file = file_path1 + width + file_path2
     
-        start_time = time.time()
-        var_baseline, var_base_ref, _, _ = sim_with_noise_parallel(0, file)
-        var_measured, var_ref, var_signal, phases = sim_with_noise_parallel(1, file)
+        var_baseline, var_base_ref, _, _ = sim_with_noise_parallel(0, file, length, pwr_ratio, fin_data)
+        var_measured, var_ref, var_signal, phases = sim_with_noise_parallel(1, file, length, pwr_ratio, fin_data)
 
         squeezing_dB = 10*np.log10(
             var_measured/var_ref
         )
+        fin_data['dB squeezing'].append(np.max(squeezing_dB))
+        fin_data['dB anti-squeezing'].append(np.min(squeezing_dB))
 
         squeezing_dB_snl = 10*np.log10(
             var_baseline/var_base_ref
         )
+        fin_data['dB constructive interference'].append(np.max(squeezing_dB_snl))
+        fin_data['dB destructive interference'].append(np.min(squeezing_dB_snl))
         # sqz_dB_offset = np.mean(squeezing_dB_snl)
 
         plt.figure(figsize=(8, 5))
@@ -744,7 +782,7 @@ def main():
         # plt.xlim(0, 2*np.pi)
         plt.legend(loc='upper right')
         plt.grid(True)
-        plt.show()
+        # plt.show()
 
         print(f"Maximum Squeezing: {np.min(squeezing_dB):.2f} dB")
         print(f"Maximum Anti-Squeezing: {np.max(squeezing_dB):.2f} dB")
