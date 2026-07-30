@@ -604,7 +604,7 @@ def sim_with_noise_parallel(gd):
         phases: The phase array I scanned through.
     '''
 
-    num_iter = 100 # You will likely need 100-1000+ to get clean variance statistics
+    num_iter = 50 # You will likely need 100-1000+ to get clean variance statistics
     
     # 1. Setup everything once
     print("Setting up mode and base pulse...")
@@ -685,7 +685,7 @@ def sim_with_noise_parallel(gd):
     var_signal = np.array(var_signal)
     print(f'var signal = {np.min(var_signal)}')
 
-    var_ref = np.var(overlaps_vacuum)
+    var_ref = np.var(overlaps_snl)
     print(f'var ref = {np.mean(var_ref)}')
 
     var_measured = eta*var_signal + (1-eta)*np.var(overlaps_vacuum)  #var_ref
