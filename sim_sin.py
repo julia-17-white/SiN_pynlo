@@ -546,6 +546,34 @@ def verify_vacuum_energy(pulse, v_grid, N=1000):
     plt.grid()
     # plt.show()
 
+def calculate_peak_offset(phase, power1, power2):
+    '''
+    to calculate the phase offset of my squeezing curve vs the interference curve.
+    Params:
+        phase: my theta array
+        power1: the squeezing_dB array
+        power2: the constructive interference array
+    Resturns:
+        phase1 - phase2: the phase offset of the first two peaks of the arrays
+    '''
+
+    # 1. Mask to the first period to avoid massive out-of-bounds peaks
+    mask = (phase >= 0) & (phase <= 2 * np.pi)
+    phase_window = phase[mask]
+    
+    # 2. Find the peaks
+    idx1 = np.argmax(power1[mask])
+    idx2 = np.argmax(power2[mask])
+    
+    # 3. Calculate raw difference
+    raw_offset = phase_window[idx1] - phase_window[idx2]
+    
+    # 4. Wrap the difference to always find the shortest path (-pi to pi)
+    period = 2 * np.pi
+    shortest_offset = (raw_offset + np.pi) % period - np.pi
+    
+    return shortest_offset
+
 
 def run_single_iteration(iteration_index, length):
     '''
@@ -588,28 +616,6 @@ def run_single_iteration(iteration_index, length):
 
     # Return the results back to the main process
     return I_ref, a_v_out[-1], pure_vacuum_v
-
-def calculate_peak_offset(phase, power1, power2):
-    '''
-    to calculate the phase offset of my squeezing curve vs the interference curve.
-    Params:
-        phase: my theta array
-        power1: the squeezing_dB array
-        power2: the constructive interference array
-    Resturns:
-        phase1 - phase2: the phase offset of the first two peaks of the arrays
-    '''
-
-    # Find the index of the maximum power for both curves
-    idx1 = np.argmax(power1)
-    idx2 = np.argmax(power2)
-    
-    # Find the corresponding phase values
-    phase1 = phase[idx1]
-    phase2 = phase[idx2]
-    
-    # Calculate the difference
-    return phase1 - phase2
 
 
 # Simulations with injected noise:
@@ -782,10 +788,13 @@ def main():
         # plt.xlim(0, 2*np.pi)
         plt.legend(loc='upper right')
         plt.grid(True)
-        # plt.show()
+        plt.show()
 
         print(f"Maximum Squeezing: {np.min(squeezing_dB):.2f} dB")
         print(f"Maximum Anti-Squeezing: {np.max(squeezing_dB):.2f} dB")
+
+        phase_diff = calculate_peak_offset(phases, squeezing_dB, squeezing_dB_snl)
+        print(f'Phase offset: {phase_diff/np.pi:.2f} Pi')
 
         end_time = time.time()
         print(f'Total run time = {(end_time - start_time):.2f} s')
