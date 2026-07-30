@@ -29,12 +29,13 @@ import copy
 import concurrent.futures
 import time
 import fiber_sim
+import glob
 
 # from pynlo.medium import RamanResponse
 # from pynlo.utility import fft
 
 
-def setup_waveguide_and_pulse(gd):
+def setup_waveguide_and_pulse(gd, file):
     '''
     Creates the base pulse and waveguide that will be used.
     Params:
@@ -73,7 +74,7 @@ def setup_waveguide_and_pulse(gd):
     # import ri_interpolator
     # sim_freqs = ri_interpolator.sim_freqs
     ## -- incorporating numpy mode files from abijith --
-    mode_file = 'from_abijith/jw_modes/JW_SiN_O2Clad_800nmThickness_1400nmWidth_gamma_aeff.npy' 
+    mode_file = file
     data = np.load(mode_file)
 
     # --- 1. Extract and Convert Data
@@ -448,7 +449,7 @@ _worker_mode = None
 _worker_v_grid = None
 _worker_a_v_lo = None
 
-def init_worker(gd):
+def init_worker(gd, file):
     """
     This runs once on each CPU core when the process pool spawns.
     It initializes the un-picklable pynlo objects locally on that core.
@@ -456,7 +457,7 @@ def init_worker(gd):
     global _worker_pulse, _worker_mode, _worker_v_grid, _worker_a_v_lo, _worker_a_v_clean_out
     
     # Generate the base pulse and mode directly on this core
-    _worker_pulse, _worker_mode, _worker_v_grid = setup_waveguide_and_pulse(gd)
+    _worker_pulse, _worker_mode, _worker_v_grid = setup_waveguide_and_pulse(gd, file)
     _worker_a_v_lo = copy.deepcopy(_worker_pulse.a_v)
     clean_pulse = copy.deepcopy(_worker_pulse)
     
@@ -591,7 +592,7 @@ def run_single_iteration(iteration_index):
 
 
 # Simulations with injected noise:
-def sim_with_noise_parallel(gd):
+def sim_with_noise_parallel(gd, file):
     '''
     Method that runs the main pulse propagation to variance readout on 2 cores.
     It runs an initial propagation where you can create diagnostic plots before doing the multi-core variance propagations and readout.
@@ -604,11 +605,11 @@ def sim_with_noise_parallel(gd):
         phases: The phase array I scanned through.
     '''
 
-    num_iter = 100 # You will likely need 100-1000+ to get clean variance statistics
+    num_iter = 10 # You will likely need 100-1000+ to get clean variance statistics
     
     # 1. Setup everything once
     print("Setting up mode and base pulse...")
-    base_pulse, mode, v_grid = setup_waveguide_and_pulse(gd)
+    base_pulse, mode, v_grid = setup_waveguide_and_pulse(gd, file)
     
     # Run one sequential test iteration on the main thread
     print("Running diagnostic single iteration...")
@@ -641,7 +642,7 @@ def sim_with_noise_parallel(gd):
     max_cores = 2
 
     # Start the multiprocessing pool
-    with concurrent.futures.ProcessPoolExecutor(max_workers=max_cores, initializer=init_worker, initargs=(gd, )) as executor:
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max_cores, initializer=init_worker, initargs=(gd, file)) as executor:
         
         # executor.map guarantees the output list matches the input sequence order
         results = executor.map(run_single_iteration, range(num_iter))
@@ -701,40 +702,57 @@ def sim_with_noise_parallel(gd):
 
     return var_measured, var_ref, var_signal, phases
 
-# --- Execution Block ---
-if __name__ == '__main__':
+
+def main():
+    widths = ['800', '1000', '1200', '1400', '1600', '1800', '2000', '2200', '2400', '2600', '2800', '3000', '3200', '3400', '3600',
+              '3800', '4000', '4200', '4400', '4600', '4800', '5000']
+    file_path1 = 'from_abijith/jw_modes/JW_SiN_O2Clad_800nmThickness_' 
+    file_path2 = 'nmWidth_gamma_aeff.npy'
+
     # It is highly recommended to disable OpenMP threading when using ProcessPoolExecutor
     # so threads and processes don't fight for CPU time.
     os.environ["OMP_NUM_THREADS"] = "1"
+
+    for width in widths:
+        print('')
+        print('*'*50)
+        print('')
+        print(f'starting run for {width}nm wide waveguide')
+
+        file = file_path1 + width + file_path2
     
-    start_time = time.time()
-    var_baseline, var_base_ref, _, _ = sim_with_noise_parallel(0)
-    var_measured, var_ref, var_signal, phases = sim_with_noise_parallel(1)
+        start_time = time.time()
+        var_baseline, var_base_ref, _, _ = sim_with_noise_parallel(0, file)
+        var_measured, var_ref, var_signal, phases = sim_with_noise_parallel(1, file)
 
-    squeezing_dB = 10*np.log10(
-        var_measured/var_ref
-    )
+        squeezing_dB = 10*np.log10(
+            var_measured/var_ref
+        )
 
-    squeezing_dB_snl = 10*np.log10(
-        var_baseline/var_base_ref
-    )
-    # sqz_dB_offset = np.mean(squeezing_dB_snl)
+        squeezing_dB_snl = 10*np.log10(
+            var_baseline/var_base_ref
+        )
+        # sqz_dB_offset = np.mean(squeezing_dB_snl)
 
-    plt.figure(figsize=(8, 5))
-    plt.plot(phases, squeezing_dB, label='Output State Noise above SNL', color='indigo', linewidth=2)
-    plt.plot(phases, squeezing_dB_snl, label='Shot Noise Variation', color='forestgreen', linewidth=2)
-    plt.axhline(0, color='k', linestyle='--', label='Shot Noise Limit (SNL)')
-    plt.xlabel('Local Oscillator Phase (rad)')
-    plt.ylabel('Quantum Noise Variance (dB)')
-    plt.title('Predicted Squeezing vs. LO Phase')
-    # plt.xlim(0, 2*np.pi)
-    plt.legend(loc='upper right')
-    plt.grid(True)
-    plt.show()
+        plt.figure(figsize=(8, 5))
+        plt.plot(phases, squeezing_dB, label='Output State Noise above SNL', color='indigo', linewidth=2)
+        plt.plot(phases, squeezing_dB_snl, label='Shot Noise Variation', color='forestgreen', linewidth=2)
+        plt.axhline(0, color='k', linestyle='--', label='Shot Noise Limit (SNL)')
+        plt.xlabel('Local Oscillator Phase (rad)')
+        plt.ylabel('Quantum Noise Variance (dB)')
+        plt.title('Predicted Squeezing vs. LO Phase')
+        # plt.xlim(0, 2*np.pi)
+        plt.legend(loc='upper right')
+        plt.grid(True)
+        plt.show()
 
-    print(f"Maximum Squeezing: {np.min(squeezing_dB):.2f} dB")
-    print(f"Maximum Anti-Squeezing: {np.max(squeezing_dB):.2f} dB")
+        print(f"Maximum Squeezing: {np.min(squeezing_dB):.2f} dB")
+        print(f"Maximum Anti-Squeezing: {np.max(squeezing_dB):.2f} dB")
 
-    end_time = time.time()
-    print(f'Total run time = {(end_time - start_time):.2f} s')
+        end_time = time.time()
+        print(f'Total run time = {(end_time - start_time):.2f} s')
 
+
+# --- Execution Block ---
+if __name__ == '__main__':
+    main()
