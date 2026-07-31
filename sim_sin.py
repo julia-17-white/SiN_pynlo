@@ -58,16 +58,12 @@ def setup_waveguide_and_pulse(gd, file, length, fin_data):
     
     pulse = fiber_sim.nd_run()
     pulse.a_v = pulse.a_v * fib_loss * coup_loss_perc
-    print("Frq Res: {:.3g} GHz".format(pulse.dv * 1e-9))
+    # print("Frq Res: {:.3g} GHz".format(pulse.dv * 1e-9))
     v_grid = pulse.v_grid
     # print(f'v_grid length = {len(v_grid)}')
 
     T0 = t_fwhm / 1.763
     P0_expected = e_p / (2*T0)
-    print("Expected P0 (W):", P0_expected)
-
-    T0 = t_fwhm / 1.763
-    P0_expected = e_p / T0
     print("Expected P0 (W):", P0_expected)
 
     # SiN waveguide
@@ -134,25 +130,42 @@ def setup_waveguide_and_pulse(gd, file, length, fin_data):
     print('')
     beta2 = mode.beta2
     print(f"Mean Beta2 : {np.mean(beta2):.3e} s^2/m")
+    gamma = mode.gamma
+    print(f"Mean Gamma : {np.mean(gamma):.3e} s^2/m")
 
     # --- Calculate Soliton Period ---
     # Find the exact beta_2 at the central frequency (v0)
     idx_v0 = np.argmin(np.abs(v_grid - v0))
     beta2_v0 = beta2[idx_v0]
+    gamma_v0 = gamma[idx_v0]
+    # print(gamma_v0)
 
     # Calculate Soliton Period (z_0)
     z_0 = np.pi * (t_fwhm/1.7627)**2 / (2 * np.abs(beta2_v0) )
 
-    print(f"Beta2 at v0 ({v0*1e-12:.2f} THz): {beta2_v0:.3e} s^2/m")
+    # print(f"Beta2 at v0 ({v0*1e-12:.2f} THz): {beta2_v0:.3e} s^2/m")
     LD = T0**2 / abs(beta2_v0)
-    print(f"Dispersion Length (L_D): {LD} m")
-    print(f"Soliton Period (z_0): {z_0:.5f} m")
-    print(f'Number of soliton periods: {length/z_0}')
-    print(f'typical gamma: {np.mean(gamma_data)}')
+    # print(f"Dispersion Length (L_D): {LD} m")
+    # print(f"Soliton Period (z_0): {z_0:.5f} m")
+    # print(f'Number of soliton periods: {length/z_0}')
+    # print(f'typical gamma: {np.mean(gamma_data)}')
     n_square = np.mean(gamma_data)*P0_expected*(T0**2)/abs(beta2_v0)
     l_nonlin = 1/(np.mean(gamma_data)*P0_expected)
-    print(f'Nonlinear length: {l_nonlin}')
-    print(f'n_square = {n_square} or {LD/l_nonlin}')
+    # print(f'Nonlinear length: {l_nonlin}')
+    # print(f'n_square = {n_square} or {LD/l_nonlin}')
+
+    if gd != 0:
+        fin_data['dispersive length'].append(LD)
+        fin_data['nonlinear length'].append(l_nonlin)
+        fin_data['N^2'].append(n_square)
+        fin_data['number of soliton periods'].append(length/z_0)
+        fin_data['phi_nonlin'].append((np.pi/2) * n_square * length/z_0)
+
+        fin_data['beta_2 at peak'].append(beta2_v0)
+        fin_data['average beta2'].append(np.mean(beta2))
+        fin_data['gamma at peak'].append(np.mean(gamma_data))
+        fin_data['average gamma'].append(gamma_v0)
+
 
     return pulse, mode, v_grid
 
@@ -746,9 +759,10 @@ def main():
     os.environ["OMP_NUM_THREADS"] = "1"
 
     fin_data = {'width':[], 'beta_2 at peak': [], 'average beta2': [], 'gamma at peak': [], 'average gamma': [],
+                'dispersive length':[], 'nonlinear length':[],
                 'number of soliton periods':[], 'N^2': [], 'phi_nonlin': [], 'dB squeezing': [],
                 'dB anti-squeezing': [], 'dB constructive interference': [], 'dB destructive interference': [],
-                'phase offset': []}
+                'phase offset (rad)': []}
 
 
     for width in widths:
@@ -788,16 +802,22 @@ def main():
         # plt.xlim(0, 2*np.pi)
         plt.legend(loc='upper right')
         plt.grid(True)
-        plt.show()
+        # plt.show()
 
         print(f"Maximum Squeezing: {np.min(squeezing_dB):.2f} dB")
         print(f"Maximum Anti-Squeezing: {np.max(squeezing_dB):.2f} dB")
 
         phase_diff = calculate_peak_offset(phases, squeezing_dB, squeezing_dB_snl)
+        fin_data['phase offset (rad)'].append(phase_diff)
         print(f'Phase offset: {phase_diff/np.pi:.2f} Pi')
 
         end_time = time.time()
         print(f'Total run time = {(end_time - start_time):.2f} s')
+
+    # print(fin_data)
+
+    fin_data_df = pd.DataFrame(data=fin_data)
+    print(fin_data_df.head())
 
 
 # --- Execution Block ---
