@@ -101,6 +101,8 @@ def setup_waveguide_and_pulse(gamma, D):
     print('')
     beta2 = mode.beta2
     print(f"Mean Beta2 : {np.mean(beta2):.3e} s^2/m")
+    beta2 = mode.gamma
+    print(f"Mean gamma : {np.mean(gamma):.3e} s^2/m")
 
     # --- Calculate Soliton Period ---
     # Find the exact beta_2 at the central frequency (v0)
