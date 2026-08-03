@@ -163,8 +163,8 @@ def setup_waveguide_and_pulse(gd, file, length, fin_data):
 
         fin_data['beta_2 at peak'].append(beta2_v0)
         fin_data['average beta2'].append(np.mean(beta2))
-        fin_data['gamma at peak'].append(np.mean(gamma_data))
-        fin_data['average gamma'].append(gamma_v0)
+        fin_data['average gamma'].append(np.mean(gamma_data))
+        fin_data['gamma at peak'].append(np.real(gamma_v0))
 
 
     return pulse, mode, v_grid
@@ -254,7 +254,7 @@ def nice_plot(a_v, sim, pulse, a_t, z):
     # plt.show()
 
 
-def plot_osa_spectrum(a_v, sim, pulse):
+def plot_osa_spectrum(a_v, sim, pulse, fig_path):
     """
     Plots the spectrum mimicking an OSA output.
     X-axis: Wavelength (nm)
@@ -314,6 +314,9 @@ def plot_osa_spectrum(a_v, sim, pulse):
     plt.legend(fontsize=12)
     plt.grid(True)
     plt.tight_layout()
+
+    plt.savefig(f'{fig_path}osa_spectrum.svg')
+    plt.close()
     # plt.show()
 
 
@@ -375,7 +378,7 @@ def nonlin_phas_shift(a_t, pulse, mode, length=0.03):
 
 # Creating a second pulse and interfering the two pulses
 
-def pulse_interference(a_v, pulse, pwr_ratio):
+def pulse_interference(a_v, pulse, pwr_ratio, base_pulse, fig_path):
     '''
     Create a new un-propagated LO pulse and interfere it with the pulse that has propagated through the waveguide 
     to simulate homodyne detection with a single detector.
@@ -384,35 +387,10 @@ def pulse_interference(a_v, pulse, pwr_ratio):
     Returns:
         None: Plots the interference.
     '''
+    a_v = a_v[-1]
 
-    # Pulse
-    v_min = c/4000e-9
-    v_max = c/400e-9
-    v0 = c/1560e-9
-    e_p = 50e-12 
-    # e_p = 3.5e-11
-    t_fwhm = 210e-15
-    # t_fwhm = 50e-15
-
-    T0 = t_fwhm / 1.763
-    P0_expected = e_p / T0
-    print("Expected P0 (W):", P0_expected)
-    # phi_NL = 1.3 * P0_expected * 0.01
-    # print("Nonlinear phase shift (rad):", phi_NL)
-
-
-    #JULIA ADDED:
-    # dv = 300e12
-    # v_min = v0 - dv
-    # v_max = v0 + dv
-
-    n_points = 2**13 # 20 for sidebands
-
-    # and a_v_aux is the newly created auxiliary pulse object
-    # I'll create it here
-
-    e_p_aux = e_p * pwr_ratio
-    pulse_aux = pynlo.light.Pulse.Sech(n_points, v_min, v_max, v0, e_p_aux, t_fwhm)
+    pulse_aux = copy.deepcopy(base_pulse)
+    pulse_aux.a_v = pulse_aux.a_v * pwr_ratio
     a_v_aux = inject_noise(pulse_aux.a_v, pulse_aux.v_grid, pulse_aux, local_rng=np.random.default_rng(seed_value - 1))
     # a_v_aux = noisy_aux.a_v
 
@@ -428,11 +406,11 @@ def pulse_interference(a_v, pulse, pwr_ratio):
     a_v_aux_shifted = a_v_aux * global_phase * phase_ramp
 
     # Interfere them (simply add the complex fields)
-    a_v_interfered = a_v[-1] + a_v_aux_shifted
+    a_v_interfered = a_v + a_v_aux
 
     # Calculate spectral intensities for plotting
-    I_main_out = np.abs(a_v[-1])**2
-    I_aux = np.abs(a_v_aux_shifted)**2
+    I_main_out = np.abs(a_v)**2
+    I_aux = np.abs(a_v_aux)**2
     I_interfered = np.abs(a_v_interfered)**2
 
     plt.figure(figsize=(10, 6))
@@ -444,7 +422,7 @@ def pulse_interference(a_v, pulse, pwr_ratio):
 
     plt.plot(freq_thz, to_db(I_interfered), color='black', linewidth=2, label='Interfered Spectrum')
     plt.plot(freq_thz, to_db(I_main_out), color='tab:green', linestyle='--', alpha=0.7, label='SQZ')
-    plt.plot(freq_thz, to_db(I_aux), color='tab:orange', linestyle=':', alpha=0.7, label=rf'AUX, $\theta = ${theta}$\pi$')
+    plt.plot(freq_thz, to_db(I_aux), color='tab:orange', linestyle=':', alpha=0.7, label='AUX')
 
     plt.xlabel('Frequency (THz)')
     plt.ylabel('Relative Intensity (dB)')
@@ -453,6 +431,9 @@ def pulse_interference(a_v, pulse, pwr_ratio):
     # plt.ylim(-40, 5)
     plt.grid(True)
     plt.legend()
+
+    plt.savefig(f'{fig_path}pulse_interference.svg')
+    plt.close()
     # plt.show()
 
 
@@ -632,7 +613,7 @@ def run_single_iteration(iteration_index, length):
 
 
 # Simulations with injected noise:
-def sim_with_noise_parallel(gd, file, length, pwr_ratio, fin_data):
+def sim_with_noise_parallel(gd, file, length, pwr_ratio, fin_data, fig_path):
     '''
     Method that runs the main pulse propagation to variance readout on 2 cores.
     It runs an initial propagation where you can create diagnostic plots before doing the multi-core variance propagations and readout.
@@ -645,7 +626,7 @@ def sim_with_noise_parallel(gd, file, length, pwr_ratio, fin_data):
         phases: The phase array I scanned through.
     '''
 
-    num_iter = 30 # You will likely need 100-1000+ to get clean variance statistics
+    num_iter = 500 # You will likely need 100-1000+ to get clean variance statistics
     
     # 1. Setup everything once
     print("Setting up mode and base pulse...")
@@ -665,12 +646,13 @@ def sim_with_noise_parallel(gd, file, length, pwr_ratio, fin_data):
     # Propagate the noisy pulse through the waveguide
     new_pulse, z, a_t, a_v_out, sim = propagate_pulse(input_pulse, mode, length)
     
-    # Safely plot the results on the main thread
-    # nice_plot(a_v_out, sim, new_pulse, a_t, z)
-    plot_osa_spectrum(a_v_out, sim, new_pulse)
-    # verify_vacuum_energy(base_pulse, v_grid, 1000)
-    # nonlin_phas_shift(a_t, new_pulse, mode, 0.03)
-    # pulse_interference(a_v_out, new_pulse)
+    if gd != 0:
+        # Safely plot the results on the main thread
+        # nice_plot(a_v_out, sim, new_pulse, a_t, z)
+        plot_osa_spectrum(a_v_out, sim, new_pulse, fig_path)
+        # verify_vacuum_energy(base_pulse, v_grid, 1000)
+        # nonlin_phas_shift(a_t, new_pulse, mode, 0.03)
+        pulse_interference(a_v_out, new_pulse, pwr_ratio, base_pulse, fig_path)
     
     # Lists to store the complex overlap integrals
     overlaps_signal = []
@@ -745,13 +727,13 @@ def sim_with_noise_parallel(gd, file, length, pwr_ratio, fin_data):
 
 
 def main():
-    # widths = ['800', '1000', '1200', '1400', '1600', '1800', '2000', '2200', '2400', '2600', '2800', '3000', '3200', '3400', '3600',
-    #           '3800', '4000', '4200', '4400', '4600', '4800', '5000']
-    widths = ['1400', '1600']
+    widths = ['800', '1000', '1200', '1400', '1600', '1800', '2000', '2200', '2400', '2600', '2800', '3000', '3200', '3400', '3600',
+              '3800', '4000', '4200', '4400', '4600', '4800', '5000']
+    # widths = ['1200', '1400', '4600']
     file_path1 = 'from_abijith/jw_modes/JW_SiN_O2Clad_800nmThickness_' 
     file_path2 = 'nmWidth_gamma_aeff.npy'
 
-    length = .003 #m
+    length = .50 #m
     pwr_ratio = .01
 
     # It is highly recommended to disable OpenMP threading when using ProcessPoolExecutor
@@ -763,10 +745,15 @@ def main():
                 'number of soliton periods':[], 'N^2': [], 'phi_nonlin': [], 'dB squeezing': [],
                 'dB anti-squeezing': [], 'dB constructive interference': [], 'dB destructive interference': [],
                 'phase offset (rad)': []}
+    
+    csv_path = 'wvgd_outputs/length_scan/'
 
 
     for width in widths:
         start_time = time.time()
+        fig_path = csv_path + 'generated_plots/p' + str(length)[2:] + 'm/' + str(width) + 'nm/'
+        os.makedirs(fig_path, exist_ok=True)
+
         fin_data['width'].append(width)
 
         print('')
@@ -776,8 +763,8 @@ def main():
 
         file = file_path1 + width + file_path2
     
-        var_baseline, var_base_ref, _, _ = sim_with_noise_parallel(0, file, length, pwr_ratio, fin_data)
-        var_measured, var_ref, var_signal, phases = sim_with_noise_parallel(1, file, length, pwr_ratio, fin_data)
+        var_baseline, var_base_ref, _, _ = sim_with_noise_parallel(0, file, length, pwr_ratio, fin_data, fig_path)
+        var_measured, var_ref, var_signal, phases = sim_with_noise_parallel(1, file, length, pwr_ratio, fin_data, fig_path)
 
         squeezing_dB = 10*np.log10(
             var_measured/var_ref
@@ -802,6 +789,9 @@ def main():
         # plt.xlim(0, 2*np.pi)
         plt.legend(loc='upper right')
         plt.grid(True)
+        plt.savefig(f'{fig_path}dB_squeezing.svg')
+        plt.close()
+        
         # plt.show()
 
         print(f"Maximum Squeezing: {np.min(squeezing_dB):.2f} dB")
@@ -811,6 +801,7 @@ def main():
         fin_data['phase offset (rad)'].append(phase_diff)
         print(f'Phase offset: {phase_diff/np.pi:.2f} Pi')
 
+
         end_time = time.time()
         print(f'Total run time = {(end_time - start_time):.2f} s')
 
@@ -818,6 +809,8 @@ def main():
 
     fin_data_df = pd.DataFrame(data=fin_data)
     print(fin_data_df.head())
+
+    fin_data_df.to_csv(csv_path + str(length) + 'm.csv')
 
 
 # --- Execution Block ---
