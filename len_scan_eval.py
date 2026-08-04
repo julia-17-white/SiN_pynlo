@@ -263,9 +263,11 @@ def main():
     # print("Loaded data for lengths:", list(all_data.keys()))
     # print(all_data[.003].keys())
 
+    # print(all_data[.01]['beta_2 at peak'])
+
     n_square_m(all_data, lengths)
 
-    meas_sqz(all_data, lengths, True)
+    meas_sqz(all_data, lengths, False)
 
     beta2_plot(all_data, lengths)
 
