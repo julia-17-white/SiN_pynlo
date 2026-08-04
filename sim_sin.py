@@ -69,7 +69,7 @@ def setup_waveguide_and_pulse(gd):
     print("Expected P0 (W):", P0_expected)
 
     # SiN waveguide
-    thickness, width = 800e-9, 1200e-9
+    thickness, width = 800e-9, 1400e-9
     # import ri_interpolator
     # sim_freqs = ri_interpolator.sim_freqs
     ## -- incorporating numpy mode files from abijith --
@@ -124,7 +124,7 @@ def setup_waveguide_and_pulse(gd):
     g3_v = pynlo.utility.chi3.gamma_to_g3(v_grid, gamma_spline(v_grid))
 
     #---- Mode
-    length = 0.03
+    length = 0.010
     alpha_val_per_m = (0.1 / 10.0) * np.log(10) / length
     alpha_v = np.full_like(v_grid, alpha_val_per_m) # including loss
 
@@ -155,7 +155,7 @@ def setup_waveguide_and_pulse(gd):
 
     return pulse, mode, v_grid
 
-def propagate_pulse(pulse, mode, length=0.03):
+def propagate_pulse(pulse, mode, length=0.010):
     '''
     Propagates the input pulse through the mode (waveguide).
     Params:
@@ -303,7 +303,7 @@ def plot_osa_spectrum(a_v, sim, pulse):
     plt.show()
 
 
-def nonlin_phas_shift(a_t, pulse, mode, length=0.03):
+def nonlin_phas_shift(a_t, pulse, mode, length=0.010):
     '''
     Method to calculate the nonlinear phase shift that occurs in the waveguide.
     Params:
@@ -578,7 +578,7 @@ def run_single_iteration(iteration_index):
     noisy_pulse.a_v = noisy_input_v
     
     # Propagate the noisy pulse
-    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(noisy_pulse, _worker_mode, length=.03)
+    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(noisy_pulse, _worker_mode, length=.010)
     delta_a_v = a_v_out[-1] - _worker_a_v_clean_out # not sure if this step is necessary but it is technically isolating the noise fluctuations
     I_ref = np.sum(np.abs(a_v_out[-1])**2) * _worker_pulse.dv
     
@@ -604,7 +604,7 @@ def sim_with_noise_parallel(gd):
         phases: The phase array I scanned through.
     '''
 
-    num_iter = 50 # You will likely need 100-1000+ to get clean variance statistics
+    num_iter = 100 # You will likely need 100-1000+ to get clean variance statistics
     
     # 1. Setup everything once
     print("Setting up mode and base pulse...")
@@ -622,13 +622,13 @@ def sim_with_noise_parallel(gd):
     input_pulse.a_v = noisy_a_v_in 
     
     # Propagate the noisy pulse through the waveguide
-    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(input_pulse, mode, 0.03)
+    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(input_pulse, mode, 0.010)
     
     # Safely plot the results on the main thread
     # nice_plot(a_v_out, sim, new_pulse, a_t, z)
     plot_osa_spectrum(a_v_out, sim, new_pulse)
     # verify_vacuum_energy(base_pulse, v_grid, 1000)
-    # nonlin_phas_shift(a_t, new_pulse, mode, 0.03)
+    # nonlin_phas_shift(a_t, new_pulse, mode, 0.010)
     # pulse_interference(a_v_out, new_pulse)
     
     # Lists to store the complex overlap integrals
