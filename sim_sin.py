@@ -270,7 +270,7 @@ def plot_osa_spectrum(a_v, sim, pulse, fig_path):
     p_out_per_nm = np.abs(a_v[-1])**2 * sim.dv_dl * 1e-9
     
     # 3. Convert to dB scale
-    # We add a tiny offset (1e-20) to prevent log10(0) warnings
+    # Add a tiny offset (1e-20) to prevent log10(0) warnings
     p_in_dB = 10 * np.log10(p_in_per_nm + 1e-20)
     p_out_dB = 10 * np.log10(p_out_per_nm + 1e-20)
 
@@ -769,8 +769,8 @@ def main():
         squeezing_dB = 10*np.log10(
             var_measured/var_ref
         )
-        fin_data['dB squeezing'].append(np.max(squeezing_dB))
-        fin_data['dB anti-squeezing'].append(np.min(squeezing_dB))
+        fin_data['dB squeezing'].append(np.min(squeezing_dB))
+        fin_data['dB anti-squeezing'].append(np.max(squeezing_dB))
 
         squeezing_dB_snl = 10*np.log10(
             var_baseline/var_base_ref
