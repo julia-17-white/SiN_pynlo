@@ -6,7 +6,7 @@ In generating the mode file, I calculate the effective index and nonlinear param
 This script takes the soliton out of the oscillator in our Menhir comb and applies the nonlinear effects of the PM-1550 in the laser and that couples out of the laser as well as the ND fiber that is used to compress the pulse back to being near the foueier-transform limit. This is done in `fiber_sim`'s `nd_run()` method and the results are a close match to the laser spectrum we see out of these fibers. The results are also verified to match the results in the GUI written by Xiangwen Gao for all fiber simulation in our group.
 
 ### Mode Calculations:
-These use the [EMpy](https://github.com/lbolla/EMpy/tree/master) VFD mode solver and were provided by Abijith Kowligy. 
+These use the [EMpy](https://github.com/lbolla/EMpy/tree/master) SVFD mode solver and were provided by Abijith Kowligy. They are preformed in `from_abijith/modesolver.py`.
 
 
 ### Single Propagation:
