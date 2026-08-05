@@ -26,6 +26,7 @@ import pynlo
 import copy
 import concurrent.futures
 import time
+import fiber_sim
 
 # from pynlo.medium import RamanResponse
 # from pynlo.utility import fft
@@ -44,12 +45,13 @@ def setup_waveguide_and_pulse(gamma, D):
 
     # Pulse
     v_min, v_max, v0 = c/4000e-9, c/400e-9, c/1560e-9
-    e_p, t_fwhm = 14.7e-12 * .8, 260e-15
+    e_p, t_fwhm = 40e-12, 210e-15
 
     n_points = 2**13 # 20 for sidebands
 
-    pulse = pynlo.light.Pulse.Sech(n_points, v_min, v_max, v0, e_p, t_fwhm)
-    pulse_coh = pynlo.light.Pulse.Sech(n_points, v_min, v_max, v0, 44e-12, t_fwhm)
+    pulse = fiber_sim.nd_run()
+    pulse_coh = copy.deepcopy(pulse)
+    pulse.a_v = pulse.a_v * ((14.7e-12 * .8)/e_p)
     print("Frq Res: {:.3g} GHz".format(pulse.dv * 1e-9))
     v_grid = pulse.v_grid
 
@@ -361,7 +363,7 @@ def plot_osa_spectrum(a_v, sim, pulse, pulse_coh):
     # 2. Extract input and output fields
     # sim.dv_dl is the Jacobian converting Power/Hz to Power/m.
     # We multiply by 1e-9 to convert Power/m to Power/nm.
-    p_in_per_nm = np.abs(pulse_coh.a_v)**2 * sim.dv_dl * 1e-9
+    p_in_per_nm = np.abs(a_v[0])**2 * sim.dv_dl * 1e-9
     p_out_per_nm = np.abs(a_v[-1])**2 * sim.dv_dl * 1e-9
     
     # 3. Convert to dB scale
