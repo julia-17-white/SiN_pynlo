@@ -729,11 +729,11 @@ def sim_with_noise_parallel(gd, file, length, pwr_ratio, fin_data, fig_path):
 def main():
     widths = ['800', '1000', '1200', '1400', '1600', '1800', '2000', '2200', '2400', '2600', '2800', '3000', '3200', '3400', '3600',
               '3800', '4000', '4200', '4400', '4600', '4800', '5000']
-    # widths = ['1200', '1400', '4600']
+    # widths = ['5400']
     file_path1 = 'from_abijith/jw_modes/JW_SiN_O2Clad_800nmThickness_' 
     file_path2 = 'nmWidth_gamma_aeff.npy'
 
-    length = .04 #m
+    length = .1 #m
     pwr_ratio = .01
 
     # It is highly recommended to disable OpenMP threading when using ProcessPoolExecutor
