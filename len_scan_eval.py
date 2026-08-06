@@ -62,7 +62,7 @@ def n_square_m(all_data, lengths):
 
     # plt.legend()
     plt.ylabel('Number of Soliton Periods')
-    plt.xlabel(r'N^2 = L_D/L_{NL}')
+    plt.xlabel(r'$N^2 = L_D/L_{NL}$')
     plt.xscale('log')
     plt.yscale('log')
     plt.title('Waveguides in Soliton Parameter Space')
@@ -243,10 +243,12 @@ def obtain_data(data_directory):
         # Optional: If you literally want the column headers themselves to be sorted alphabetically/numerically
         df = df.reindex(sorted(df.columns), axis=1)
 
-        df = df.rename(columns={
-            'dB anti-squeezing': 'dB squeezing', 
-            'dB squeezing': 'dB anti-squeezing'
-        }) # I messed up two of the solumn names in saving the files. This fixes it without my having to modify all of the .csv files
+        if length != 0.1:
+            df = df.rename(columns={
+                'dB anti-squeezing': 'dB squeezing', 
+                'dB squeezing': 'dB anti-squeezing'
+            }) # I messed up two of the solumn names in saving the files. This fixes it without my having to modify all of the .csv files
+            # I fixed it when I re-ran the 10cm waveguides lol
 
         # df.to_dict(orient='list') automatically groups by column headers
         all_data[length] = df.to_dict(orient='list')
