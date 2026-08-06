@@ -44,26 +44,26 @@ def setup_waveguide_and_pulse(gamma, D):
     '''
 
     # Pulse
-    # v_min, v_max, v0 = c/4000e-9, c/400e-9, c/1560e-9
-    # e_p, t_fwhm = 40e-12, 210e-15
-
-    # n_points = 2**13 # 20 for sidebands
-
-    # pulse = fiber_sim.nd_run()
-    # pulse_coh = copy.deepcopy(pulse)
-    # pulse.a_v = pulse.a_v * ((14.7e-12 * .8)/e_p)
-    # print("Frq Res: {:.3g} GHz".format(pulse.dv * 1e-9))
-    # v_grid = pulse.v_grid
-
     v_min, v_max, v0 = c/4000e-9, c/400e-9, c/1560e-9
-    e_p, t_fwhm = 14.7e-12 * .8, 260e-15
+    e_p, t_fwhm = 40e-12, 210e-15
 
     n_points = 2**13 # 20 for sidebands
 
-    pulse = pynlo.light.Pulse.Sech(n_points, v_min, v_max, v0, e_p, t_fwhm)
-    pulse_coh = pynlo.light.Pulse.Sech(n_points, v_min, v_max, v0, 44e-12, t_fwhm)
+    pulse = fiber_sim.nd_run()
+    pulse_coh = copy.deepcopy(pulse)
+    pulse.a_v = pulse.a_v * ((17e-12)/e_p)
     print("Frq Res: {:.3g} GHz".format(pulse.dv * 1e-9))
     v_grid = pulse.v_grid
+
+    # v_min, v_max, v0 = c/4000e-9, c/400e-9, c/1560e-9
+    # e_p, t_fwhm = 14.7e-12 * .8, 260e-15
+
+    # n_points = 2**13 # 20 for sidebands
+
+    # pulse = pynlo.light.Pulse.Sech(n_points, v_min, v_max, v0, e_p, t_fwhm)
+    # pulse_coh = pynlo.light.Pulse.Sech(n_points, v_min, v_max, v0, 44e-12, t_fwhm)
+    # print("Frq Res: {:.3g} GHz".format(pulse.dv * 1e-9))
+    # v_grid = pulse.v_grid
 
     T0 = t_fwhm / 1.763
     P0_expected = e_p / T0
