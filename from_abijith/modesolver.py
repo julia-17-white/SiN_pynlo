@@ -52,8 +52,9 @@ def modeparams(Ex,solver_x,solver_y,wl,neff):
 
 c = speed_of_light
 ldas = np.linspace(0.5,3.02,64)
+# ldas = np.linspace(1.50,1.70,20)
 
-#ldas = np.array([1.55])
+# ldas = np.array([1.55])
 
 #ldas = np.linspace(1., 2., 20)t
 #ldas = np.array([])
@@ -65,7 +66,8 @@ tol = 1e-4
 boundary = '0000'
 
 # widths = np.linspace(0.8,5.,43)
-widths = np.array([5.4])
+# widths = np.array([0.1, 0.2, 0.3, 0.4, 0.6, 0.7, 1.3, 1.5, 1.7, 1.9, 2.1, 2.3, 2.5, 2.7, 2.9, 3.1, 3.3, 3.5, 3.7, 3.9, 4.1, 4.3, 4.5, 4.7, 4.9, 5.1, 5.3, 5.5])
+widths = np.linspace(5.6, 7.0, 15)
 
 import time
 
