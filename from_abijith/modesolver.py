@@ -51,8 +51,8 @@ def modeparams(Ex,solver_x,solver_y,wl,neff):
 
 
 c = speed_of_light
-ldas = np.linspace(0.5,3.02,64)
-# ldas = np.linspace(1.50,1.70,20)
+# ldas = np.linspace(0.5,3.02,64) 
+ldas = np.linspace(1.50,1.70,20)
 
 # ldas = np.array([1.55])
 
@@ -67,7 +67,8 @@ boundary = '0000'
 
 # widths = np.linspace(0.8,5.,43)
 # widths = np.array([0.1, 0.2, 0.3, 0.4, 0.6, 0.7, 1.3, 1.5, 1.7, 1.9, 2.1, 2.3, 2.5, 2.7, 2.9, 3.1, 3.3, 3.5, 3.7, 3.9, 4.1, 4.3, 4.5, 4.7, 4.9, 5.1, 5.3, 5.5])
-widths = np.linspace(5.6, 7.0, 15)
+# widths = np.linspace(5.6, 7.0, 15)
+widths = np.array([1.4])
 
 import time
 
@@ -105,46 +106,50 @@ for j in range(len(widths)):
         print(wl, neffs[k], gammas[k], Aeffs[k])
         print('')
     
-    np.save('from_abijith/jw_modes/JW_SiN_O2Clad_800nmThickness_' + str(int(width*1000)) + 'nmWidth_gamma_aeff.npy',np.column_stack([ldas,neffs,gammas,Aeffs]))
+    # np.save('from_abijith/jw_modes/JW_SiN_O2Clad_800nmThickness_' + str(int(width*1000)) + 'nmWidth_gamma_aeff.npy',np.column_stack([ldas,neffs,gammas,Aeffs]))
 
 
 dlda = np.diff(ldas)[0]
 D = -1e12*(ldas[:-2]/c)*np.diff(np.diff(neffs[:])/dlda)/dlda
 
 
-# fig, ax = plt.subplots(tight_layout=True)
+fig, ax = plt.subplots(tight_layout=True)
 
-# Ey_i = EMpy.utils.interp2(x,y,EMpy.utils.centered1d(solver.x),EMpy.utils.centered1d(solver.y),solver.Ey[0])
+Ey_i = EMpy.utils.interp2(x,y,EMpy.utils.centered1d(solver.x),EMpy.utils.centered1d(solver.y),solver.Ex[0])
 
-# cf = ax.contourf(x,y,np.abs(Ey_i.T), 50)
-# ax.set_xlabel(r'X [$\mu$m]')
-# ax.set_ylabel(r'Y [$\mu$m]')
-# cb = plt.colorbar(cf)
-# th = np.linspace(0, 2*np.pi, 100)
+cf = ax.contourf(x,y,np.abs(Ey_i.T), 50)
+ax.set_xlabel(r'X [$\mu$m]')
+ax.set_ylabel(r'Y [$\mu$m]')
+cb = plt.colorbar(cf)
+th = np.linspace(0, 2*np.pi, 100)
 
-# ax.plot(4*np.cos(th),3*np.sin(th),'-r',linewidth=2)
+ax.plot(1.4*np.cos(th),.8*np.sin(th),'-r',linewidth=2)
 
 
-### Dispersion Curve
-# plt.figure()
-# from scipy.interpolate import UnivariateSpline, interp1d, \
-#     InterpolatedUnivariateSpline
-# from scipy.constants import speed_of_light
-# wlMin = 0.4
-# wlMax = 2
-# #lda_, neff_0, neff_1 = np.loadtxt(fileName,delimiter=',',unpack=True)
+## Dispersion Curve
+plt.figure()
+from scipy.interpolate import UnivariateSpline, interp1d, \
+    InterpolatedUnivariateSpline
+from scipy.constants import speed_of_light
+wlMin = 0.4
+wlMax = 2
+#lda_, neff_0, neff_1 = np.loadtxt(fileName,delimiter=',',unpack=True)
 
-# lda = np.linspace(wlMin, wlMax, 5000)
-# s = InterpolatedUnivariateSpline(ldas, neffs)
+lda = np.linspace(wlMin, wlMax, 5000)
+s = InterpolatedUnivariateSpline(ldas, neffs)
 
-# n_0 = s(lda)
+n_0 = s(lda)
 
-# #plt.plot(lda, n_0, lda_, neff_0)
+# plt.plot(lda, n_0, lda_, neff_0)
 
-# dn_dlda = np.gradient(n_0)/np.gradient(lda)
-# c = speed_of_light
-# vg = c/(n_0 - lda*dn_dlda)
+dn_dlda = np.gradient(n_0)/np.gradient(lda)
+c = speed_of_light
+vg = c/(n_0 - lda*dn_dlda)
 
-# D = np.gradient(1/vg)/np.gradient(lda)
+D = np.gradient(1/vg)/np.gradient(lda)
 
-# plt.plot(lda, D*1e12)
+plt.plot(lda, D*1e12)
+plt.ylabel('Dispersion D')
+plt.xlabel('Wavelength')
+
+plt.show()
