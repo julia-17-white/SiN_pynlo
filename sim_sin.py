@@ -361,7 +361,7 @@ def pulse_interference(a_v, pulse):
     plt.show()
 
 
-def plot_osa_spectrum(a_v, sim, pulse, pulse_coh):
+def plot_osa_spectrum(a_v, sim, pulse, pulse_coh, a_v_aux):
     """
     Plots the spectrum mimicking an OSA output.
     X-axis: Wavelength (nm)
@@ -375,16 +375,19 @@ def plot_osa_spectrum(a_v, sim, pulse, pulse_coh):
     # We multiply by 1e-9 to convert Power/m to Power/nm.
     p_in_per_nm = np.abs(a_v[0])**2 * sim.dv_dl * 1e-9
     p_out_per_nm = np.abs(a_v[-1])**2 * sim.dv_dl * 1e-9
+    p_aux_per_nm = np.abs(a_v_aux[-1])**2 * sim.dv_dl * 1e-9
     
     # 3. Convert to dB scale
     # We add a tiny offset (1e-20) to prevent log10(0) warnings
     p_in_dB = 10 * np.log10(p_in_per_nm + 1e-20)
     p_out_dB = 10 * np.log10(p_out_per_nm + 1e-20)
+    p_aux_dB = 10 * np.log10(p_aux_per_nm + 1e-20)
 
     # Normalize to the input peak to match your experimental plot
     max_dB = np.max(p_in_dB)
     p_in_dB -= max_dB
     p_out_dB -= max_dB
+    p_aux_dB -= max_dB
     
     # Optional: If you want RELATIVE intensity (normalized to 0 dB max), uncomment these:
     # max_dB = np.max(p_out_dB)
@@ -396,6 +399,7 @@ def plot_osa_spectrum(a_v, sim, pulse, pulse_coh):
     
     plt.plot(wvl_nm, p_in_dB, color="forestgreen", label="Input", linewidth=2)
     plt.plot(wvl_nm, p_out_dB, color="indigo", label="Output", linewidth=2)
+    plt.plot(wvl_nm, p_aux_dB, color="darkorange", label="AUX Output", linewidth=2)
     
     plt.xlabel("Wavelength (nm)")
     plt.ylabel("Relative Power (dB/nm)")
@@ -576,11 +580,15 @@ def calculate_peak_offset(phase, power1, power2):
 # Simulations with injected noise:
 def sim_with_noise_parallel(gamma, D):
     num_iter = 100 # You will likely need 100-1000+ to get clean variance statistics
+    field_ratio = np.sqrt(150e-6/14.7e-3)
     
     # 1. Setup everything once
     print("Setting up mode and base pulse...")
     base_pulse, mode, v_grid, pulse_coh = setup_waveguide_and_pulse(gamma, D)
     prop_pulse, z, a_t, a_v_out, sim = propagate_pulse(base_pulse, mode, length=7.0)
+    aux_base = copy.deepcopy(base_pulse)
+    aux_base.a_v = aux_base.a_v * field_ratio
+    aux_prop, _, _, a_v_aux, _ = propagate_pulse(aux_base, mode, length=7.0)
     
     # Run one sequential test iteration on the main thread
     print("Running diagnostic single iteration...")
@@ -598,7 +606,7 @@ def sim_with_noise_parallel(gamma, D):
     
     # Safely plot the results on the main thread
     nice_plot(a_v_out, sim, new_pulse, a_t, z)
-    plot_osa_spectrum(a_v_out, sim, new_pulse, pulse_coh)
+    plot_osa_spectrum(a_v_out, sim, new_pulse, pulse_coh, a_v_aux)
     # verify_vacuum_energy(base_pulse, v_grid, 1000)
     # nonlin_phas_shift(a_t, new_pulse, mode, length=7.0)
     # pulse_interference(a_v_out, new_pulse)
@@ -657,8 +665,6 @@ def sim_with_noise_parallel(gamma, D):
     # var_P_ref = []
     eta = 0.78
 
-    field_ratio = np.sqrt(150e-6/14.7e-3)
-
     for theta in phases:
 
         samples = []
@@ -669,9 +675,9 @@ def sim_with_noise_parallel(gamma, D):
 
         for field in overlaps_signal:
 
-            aux = field_ratio * prop_pulse.a_v * np.exp(1j*theta)
+            aux = aux_prop.a_v * np.exp(1j*theta)
 
-            total = field + aux *.97
+            total = field + aux
 
             I = np.sum(
                 np.abs(total)**2
