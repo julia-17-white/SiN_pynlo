@@ -254,7 +254,7 @@ def nice_plot(a_v, sim, pulse, a_t, z):
     # plt.show()
 
 
-def plot_osa_spectrum(a_v, sim, pulse, fig_path):
+def plot_osa_spectrum(a_v, sim, pulse, fig_path, a_v_aux):
     """
     Plots the spectrum mimicking an OSA output.
     X-axis: Wavelength (nm)
@@ -268,16 +268,19 @@ def plot_osa_spectrum(a_v, sim, pulse, fig_path):
     # We multiply by 1e-9 to convert Power/m to Power/nm.
     p_in_per_nm = np.abs(a_v[0])**2 * sim.dv_dl * 1e-9
     p_out_per_nm = np.abs(a_v[-1])**2 * sim.dv_dl * 1e-9
+    p_aux_per_nm = np.abs(a_v_aux[-1])**2 * sim.dv_dl * 1e-9
     
     # 3. Convert to dB scale
     # Add a tiny offset (1e-20) to prevent log10(0) warnings
     p_in_dB = 10 * np.log10(p_in_per_nm + 1e-20)
     p_out_dB = 10 * np.log10(p_out_per_nm + 1e-20)
+    p_aux_dB = 10 * np.log10(p_aux_per_nm + 1e-20)
 
     # Normalize to the input peak to match your experimental plot
     max_dB = np.max(p_in_dB)
     p_in_dB -= max_dB
     p_out_dB -= max_dB
+    p_aux_dB -= max_dB
     
     # Optional: If you want RELATIVE intensity (normalized to 0 dB max), uncomment these:
     # max_dB = np.max(p_out_dB)
@@ -285,20 +288,21 @@ def plot_osa_spectrum(a_v, sim, pulse, fig_path):
     # p_out_dB -= max_dB
 
     # Saving the data to a dataframe
-    data = {
-        'wavelength': wvl_nm,
-        'in': p_in_dB,
-        'out': p_out_dB
-    }
+    # data = {
+    #     'wavelength': wvl_nm,
+    #     'in': p_in_dB,
+    #     'out': p_out_dB
+    # }
 
-    df = pd.DataFrame(data)
-    df.to_csv('simulated_spectra.csv', index=False)
+    # df = pd.DataFrame(data)
+    # df.to_csv('simulated_spectra.csv', index=False)
     
     # 4. Create the Plot
     plt.figure("OSA Spectrum", figsize=(9, 6))
     
     plt.plot(wvl_nm, p_in_dB, color="forestgreen", label="Input", linewidth=2)
     plt.plot(wvl_nm, p_out_dB, color="indigo", label="Output", linewidth=2)
+    plt.plot(wvl_nm, p_aux_dB, color="darkorange", label="AUX Output", linewidth=2)
     
     plt.xlabel("Wavelength (nm)", fontsize=12)
     plt.ylabel("Relative Intensity (dB/nm)", fontsize=12)
@@ -645,11 +649,14 @@ def sim_with_noise_parallel(gd, file, length, pwr_ratio, fin_data, fig_path, pow
     
     # Propagate the noisy pulse through the waveguide
     new_pulse, z, a_t, a_v_out, sim = propagate_pulse(input_pulse, mode, length)
+    aux_base = copy.deepcopy(input_pulse)
+    aux_base.a_v = aux_base.a_v * .01
+    aux_pulse, _, _, a_v_aux, _ = propagate_pulse(aux_base, mode, length)
     
     if gd != 0:
         # Safely plot the results on the main thread
         # nice_plot(a_v_out, sim, new_pulse, a_t, z)
-        plot_osa_spectrum(a_v_out, sim, new_pulse, fig_path)
+        plot_osa_spectrum(a_v_out, sim, new_pulse, fig_path, a_v_aux)
         # verify_vacuum_energy(base_pulse, v_grid, 1000)
         # nonlin_phas_shift(a_t, new_pulse, mode, 0.03)
         pulse_interference(a_v_out, new_pulse, pwr_ratio, base_pulse, fig_path)
@@ -694,13 +701,13 @@ def sim_with_noise_parallel(gd, file, length, pwr_ratio, fin_data, fig_path, pow
 
         for field in overlaps_signal:
 
-            aux = np.sqrt(pwr_ratio) * base_pulse.a_v * np.exp(1j*theta)
+            aux = np.sqrt(pwr_ratio) * aux_pulse.a_v * np.exp(1j*theta)
 
             total = field + aux * .97 # .97 accounts for the lack of spatial overlap
 
             I = np.sum(
                 np.abs(total)**2
-            ) * base_pulse.dv
+            ) * aux_pulse.dv
 
             samples.append(I)
 
@@ -727,21 +734,21 @@ def sim_with_noise_parallel(gd, file, length, pwr_ratio, fin_data, fig_path, pow
 
 
 def main():
-    widths = ['1200', '1400', '1600', '1800', '2000', '2200', '2400', '2600', '2800', '3000', '3200', '3400', '3600',
+    widths = ['800', '1000', '1200', '1400', '1600', '1800', '2000', '2200', '2400', '2600', '2800', '3000', '3200', '3400', '3600',
               '3800', '4000', '4200', '4400', '4600', '4800', '5000'] # '800', '1000', 
-    # widths = ['2600']
-    power_list = [350]
+    widths = ['1400']
+    power_list = [40]
     file_path1 = 'from_abijith/jw_modes/JW_SiN_O2Clad_800nmThickness_' 
     file_path2 = 'nmWidth_gamma_aeff.npy'
 
-    length = .01 #m
+    length = .003 #m
     pwr_ratio = .01
 
     # It is highly recommended to disable OpenMP threading when using ProcessPoolExecutor
     # so threads and processes don't fight for CPU time.
     os.environ["OMP_NUM_THREADS"] = "1"
     
-    csv_path = 'wvgd_outputs/pwr_scan/input_pwr_scan_amp/p' + str(length)[2:] + 'm/'
+    csv_path = 'wvgd_outputs/length_scan_co_prop/'
 
     for power in power_list:
         fin_data = {'width':[], 'beta_2 at peak': [], 'average beta2': [], 'gamma at peak': [], 'average gamma': [],
@@ -751,7 +758,7 @@ def main():
                 'phase offset (rad)': []}
         for width in widths:
             start_time = time.time()
-            fig_path = csv_path + 'generated_plots/' + str(power) + 'mW/' + str(width) + 'nm/'
+            fig_path = csv_path + 'generated_plots/' + str(width) + 'nm/' # str(power) + 'mW/' +
             os.makedirs(fig_path, exist_ok=True)
 
             fin_data['width'].append(width)
@@ -805,12 +812,12 @@ def main():
             end_time = time.time()
             print(f'Total run time = {(end_time - start_time):.2f} s')
 
-    # print(fin_data)
+        # print(fin_data)
 
         fin_data_df = pd.DataFrame(data=fin_data)
         print(fin_data_df.head())
 
-        fin_data_df.to_csv(csv_path + str(power) + 'mW.csv')
+        fin_data_df.to_csv(csv_path + str(length) + 'm.csv') #(csv_path + str(power) + 'mW.csv')
 
 
 # --- Execution Block ---

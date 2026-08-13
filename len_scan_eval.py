@@ -205,6 +205,64 @@ def gamma_plot(all_data, lengths):
     plt.title(r'Simulated $\gamma$ for various waveguides')
 
     plt.show()
+
+def sqz_vs_pwr(all_data, powers, length, anti_sqz):
+    '''
+    Method to plot the measured amount of squeezing or anti-squeezing vs the width and length of 
+    the waveguide. This will have options over whether or not to subtract off
+    the amount of shot noise change from interference.
+    '''
+    if anti_sqz == True:
+        data_val = 'dB anti-squeezing'
+    else:
+        data_val = 'dB squeezing'
+
+    plt.figure()
+
+    all_squeezing = []
+    
+    for pwr in powers:
+        for i in range(len(all_data[length][pwr]['width'])):
+            if all_data[length][pwr]['dB squeezing'][i] < 0:
+                if all_data[length][pwr]['beta_2 at peak'][i] < 0:
+        # if np.min(all_data[length]['dB squeezing']) < 0:
+                    all_squeezing.append(all_data[length][pwr][data_val][i])
+
+                # if length == .03:
+                #     print(all_data[length]['dB constructive interference'][i])
+
+        # print(all_squeezing)
+        
+    vmin = min(all_squeezing)
+    vmax = max(all_squeezing)
+
+
+    for pwr in powers:
+        for i in range(len(all_data[length][pwr]['width'])):
+            if all_data[length][pwr]['dB squeezing'][i] < 0:
+                if all_data[length][pwr]['beta_2 at peak'][i] < 0:
+        # if np.min(all_data[length]['dB squeezing']) < 0:
+                    sc = plt.scatter(
+                        pwr, 
+                        all_data[length][pwr]['width'][i], 
+                        c=all_data[length][pwr][data_val][i], 
+                        cmap='viridis',      # You can change this to any matplotlib colormap (e.g., 'plasma', 'inferno')
+                        vmin=vmin, 
+                        vmax=vmax,
+                        label=f"{pwr} mW"
+                    )
+
+
+    cbar = plt.colorbar(sc)
+    cbar.set_label(data_val)
+    plt.xscale('log')
+
+    plt.ylabel('Waveguide Width (nm)')
+    plt.xlabel('Average Power into Waveguide (mW)')
+    plt.title(f'Simulated {data_val} for {length} m Waveguides')
+
+    plt.show()
+
     
 
 def obtain_data(data_directory):
@@ -243,7 +301,7 @@ def obtain_data(data_directory):
         # Optional: If you literally want the column headers themselves to be sorted alphabetically/numerically
         df = df.reindex(sorted(df.columns), axis=1)
 
-        if length != 0.1:
+        if data_directory ==  'wvgd_outputs/length_scan/' and length != 0.1:
             df = df.rename(columns={
                 'dB anti-squeezing': 'dB squeezing', 
                 'dB squeezing': 'dB anti-squeezing'
@@ -256,24 +314,130 @@ def obtain_data(data_directory):
 
     return all_data, lengths
 
+def obtain_pwr_data(base_directory):
+    '''
+    Method to obtain the power scan data.
+    Builds a nested dictionary: all_data[length][power] = dict_of_lists
+    '''
+    all_data = {}
+    lengths_found = []
+    
+    # 1. Get all subdirectories in the base directory (e.g., 'p1m', 'p01m')
+    try:
+        dirs = [d for d in os.listdir(base_directory) if os.path.isdir(os.path.join(base_directory, d))]
+    except FileNotFoundError:
+        print(f"Directory not found: {base_directory}")
+        return all_data, lengths_found
+
+    # 2. Helper to extract the float length from folder names like 'p1m' or 'p03m'
+    def extract_length_from_dir(dirname):
+        # Replace 'p' with '0.' and remove 'm' (e.g., 'p01m' -> '0.01')
+        clean_str = dirname.replace('p', '0.').replace('m', '')
+        return float(clean_str)
+
+    # 3. Filter for valid length directories and sort them numerically
+    length_dirs = [d for d in dirs if d.startswith('p') and d.endswith('m')]
+    length_dirs.sort(key=extract_length_from_dir)
+
+    # 4. Loop through each length directory
+    for l_dir in length_dirs:
+        length_val = extract_length_from_dir(l_dir)
+        lengths_found.append(length_val)
+        
+        # Initialize the nested dictionary for this length
+        all_data[length_val] = {}
+        
+        l_dir_path = os.path.join(base_directory, l_dir)
+        
+        # 5. Get and sort the power .csv files
+        files = [f for f in os.listdir(l_dir_path) if f.endswith('mW.csv')]
+        
+        def extract_power(filename):
+            # Remove 'mW.csv' to get the power float/int
+            return float(filename.replace('mW.csv', ''))
+            
+        files.sort(key=extract_power)
+        
+        # 6. Loop through files, read, and populate the nested dictionary
+        for file_name in files:
+            power_val = extract_power(file_name)
+            file_path = os.path.join(l_dir_path, file_name)
+            
+            df = pd.read_csv(file_path)
+            df = df.iloc[:, 1:]
+            df = df.reindex(sorted(df.columns), axis=1)
+            
+            # NOTE: If you made the same column naming mistake in the power scans, 
+            # you might want to dynamically check for it here instead of hardcoding the path:
+            # if 'dB anti-squeezing' in df.columns and 'dB squeezing' in df.columns:
+            #     df = df.rename(columns={'dB anti-squeezing': 'dB squeezing', 'dB squeezing': 'dB anti-squeezing'})
+
+            all_data[length_val][power_val] = df.to_dict(orient='list')
+
+    return all_data, lengths_found
+
+def merge_scan_data(standard_data, amped_data):
+    '''
+    Merges two power scan dictionaries directly into merged_data[length][power].
+    Appends '_amp' to the column headers of the amped data to prevent overwriting.
+    '''
+    merged_data = {}
+    
+    # 1. Find all unique lengths across BOTH dictionaries
+    all_lengths = set(standard_data.keys()).union(set(amped_data.keys()))
+    
+    for length in all_lengths:
+        merged_data[length] = {}
+        
+        std_powers = standard_data.get(length, {})
+        amp_powers = amped_data.get(length, {})
+        
+        # 2. Find all unique powers for this specific length
+        all_powers = set(std_powers.keys()).union(set(amp_powers.keys()))
+        
+        for power in all_powers:
+            merged_data[length][power] = {}
+            
+            # 3. Insert the standard data as-is
+            if power in std_powers:
+                merged_data[length][power].update(std_powers[power])
+            
+            # 4. Insert the amped data, resolving naming collisions
+            if power in amp_powers:
+                for col_name, col_data in amp_powers[power].items():
+                    # If standard data already has this column, add the '_amp' suffix
+                    if col_name in merged_data[length][power]:
+                        merged_data[length][power][f"{col_name}_amp"] = col_data
+                    else:
+                        merged_data[length][power][col_name] = col_data
+                
+    return merged_data
 
 
 def main():
     data_directory = 'wvgd_outputs/length_scan/'
+    data_directory_pwr = 'wvgd_outputs/pwr_scan/input_pwr_scan/'
+    data_directory_amp = 'wvgd_outputs/pwr_scan/input_pwr_scan_amp/'
 
-    all_data, lengths = obtain_data(data_directory)
-    # print("Loaded data for lengths:", list(all_data.keys()))
-    # print(all_data[.003].keys())
+    pwr_data, pwr_lengths = obtain_pwr_data(data_directory_pwr)
+    amp_data, pwr_lengths = obtain_pwr_data(data_directory_amp)
+    all_pwr_data = merge_scan_data(pwr_data, amp_data)
+    sqz_vs_pwr(all_pwr_data, all_pwr_data[.01], .01, anti_sqz=False)
 
-    # print(all_data[.01]['beta_2 at peak'])
 
-    n_square_m(all_data, lengths)
+    # all_data, lengths = obtain_data(data_directory)
+    # # print("Loaded data for lengths:", list(all_data.keys()))
+    # # print(all_data[.003].keys())
 
-    meas_sqz(all_data, lengths, False)
+    # # print(all_data[.01]['beta_2 at peak'])
 
-    beta2_plot(all_data, lengths)
+    # n_square_m(all_data, lengths)
 
-    gamma_plot(all_data, lengths)
+    # meas_sqz(all_data, lengths, False)
+
+    # beta2_plot(all_data, lengths)
+
+    # gamma_plot(all_data, lengths)
 
 
 
