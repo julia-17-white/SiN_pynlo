@@ -650,7 +650,7 @@ def sim_with_noise_parallel(gd, file, length, pwr_ratio, fin_data, fig_path, pow
     # Propagate the noisy pulse through the waveguide
     new_pulse, z, a_t, a_v_out, sim = propagate_pulse(input_pulse, mode, length)
     aux_base = copy.deepcopy(input_pulse)
-    aux_base.a_v = aux_base.a_v * .01
+    aux_base.a_v = aux_base.a_v * np.sqrt(pwr_ratio)
     aux_pulse, _, _, a_v_aux, _ = propagate_pulse(aux_base, mode, length)
     
     if gd != 0:
@@ -659,7 +659,7 @@ def sim_with_noise_parallel(gd, file, length, pwr_ratio, fin_data, fig_path, pow
         plot_osa_spectrum(a_v_out, sim, new_pulse, fig_path, a_v_aux)
         # verify_vacuum_energy(base_pulse, v_grid, 1000)
         # nonlin_phas_shift(a_t, new_pulse, mode, 0.03)
-        pulse_interference(a_v_out, new_pulse, pwr_ratio, base_pulse, fig_path)
+        pulse_interference(a_v_out, new_pulse, np.sqrt(pwr_ratio), base_pulse, fig_path)
     
     # Lists to store the complex overlap integrals
     overlaps_signal = []
@@ -668,7 +668,7 @@ def sim_with_noise_parallel(gd, file, length, pwr_ratio, fin_data, fig_path, pow
     
     print(f"Starting parallel simulation with {num_iter} iterations...")
     # Use >4 cores (leaving the rest of my PC free so it doesn't freeze up)
-    max_cores = 2
+    max_cores = 6
 
     # Start the multiprocessing pool
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_cores, initializer=init_worker, initargs=(gd, file, length, fin_data, pow)) as executor:
@@ -701,7 +701,7 @@ def sim_with_noise_parallel(gd, file, length, pwr_ratio, fin_data, fig_path, pow
 
         for field in overlaps_signal:
 
-            aux = np.sqrt(pwr_ratio) * aux_pulse.a_v * np.exp(1j*theta)
+            aux = aux_pulse.a_v * np.exp(1j*theta)
 
             total = field + aux * .97 # .97 accounts for the lack of spatial overlap
 
@@ -736,12 +736,12 @@ def sim_with_noise_parallel(gd, file, length, pwr_ratio, fin_data, fig_path, pow
 def main():
     widths = ['800', '1000', '1200', '1400', '1600', '1800', '2000', '2200', '2400', '2600', '2800', '3000', '3200', '3400', '3600',
               '3800', '4000', '4200', '4400', '4600', '4800', '5000'] # '800', '1000', 
-    widths = ['1400']
+    # widths = ['1400']
     power_list = [40]
     file_path1 = 'from_abijith/jw_modes/JW_SiN_O2Clad_800nmThickness_' 
     file_path2 = 'nmWidth_gamma_aeff.npy'
 
-    length = .003 #m
+    length = .025 #m
     pwr_ratio = .01
 
     # It is highly recommended to disable OpenMP threading when using ProcessPoolExecutor
@@ -758,7 +758,7 @@ def main():
                 'phase offset (rad)': []}
         for width in widths:
             start_time = time.time()
-            fig_path = csv_path + 'generated_plots/' + str(width) + 'nm/' # str(power) + 'mW/' +
+            fig_path = csv_path + 'generated_plots/p' + str(length)[2:] + 'm/' + str(width) + 'nm/' # str(power) + 'mW/' +
             os.makedirs(fig_path, exist_ok=True)
 
             fin_data['width'].append(width)
