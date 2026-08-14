@@ -1,0 +1,5 @@
+{
+    "chat.agent.enabled": false,
+    "workbench.settings.showAISearchToggle": false,
+    "editor.bracketPairColorization.enabled": true
+}
