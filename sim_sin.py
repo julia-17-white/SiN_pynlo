@@ -736,19 +736,19 @@ def sim_with_noise_parallel(gd, file, length, pwr_ratio, fin_data, fig_path, pow
 def main():
     widths = ['800', '1000', '1200', '1400', '1600', '1800', '2000', '2200', '2400', '2600', '2800', '3000', '3200', '3400', '3600',
               '3800', '4000', '4200', '4400', '4600', '4800', '5000'] # '800', '1000', 
-    # widths = ['1400']
-    power_list = [40]
+    widths = ['1400']
+    power_list = [10]
     file_path1 = 'from_abijith/jw_modes/JW_SiN_O2Clad_800nmThickness_' 
     file_path2 = 'nmWidth_gamma_aeff.npy'
 
-    length = .025 #m
+    length = .003 #m
     pwr_ratio = .01
 
     # It is highly recommended to disable OpenMP threading when using ProcessPoolExecutor
     # so threads and processes don't fight for CPU time.
     os.environ["OMP_NUM_THREADS"] = "1"
     
-    csv_path = 'wvgd_outputs/length_scan_co_prop/'
+    csv_path = 'wvgd_outputs/pwr_scan_co_prop/input_pwr_scan/p' + str(length)[2:] + 'm/'
 
     for power in power_list:
         fin_data = {'width':[], 'beta_2 at peak': [], 'average beta2': [], 'gamma at peak': [], 'average gamma': [],
@@ -758,7 +758,7 @@ def main():
                 'phase offset (rad)': []}
         for width in widths:
             start_time = time.time()
-            fig_path = csv_path + 'generated_plots/p' + str(length)[2:] + 'm/' + str(width) + 'nm/' # str(power) + 'mW/' +
+            fig_path = csv_path + 'generated_plots/p' + str(power) + 'mW/' + str(width) + 'nm/' # str(length)[2:] + 'm/'
             os.makedirs(fig_path, exist_ok=True)
 
             fin_data['width'].append(width)
@@ -817,7 +817,7 @@ def main():
         fin_data_df = pd.DataFrame(data=fin_data)
         print(fin_data_df.head())
 
-        fin_data_df.to_csv(csv_path + str(length) + 'm.csv') #(csv_path + str(power) + 'mW.csv')
+        fin_data_df.to_csv(csv_path + str(power) + 'mW.csv') #(csv_path + str(length) + 'm.csv')
 
 
 # --- Execution Block ---

@@ -415,25 +415,25 @@ def merge_scan_data(standard_data, amped_data):
 
 
 def main():
-    data_directory = 'wvgd_outputs/length_scan/'
+    data_directory = 'wvgd_outputs/length_scan_co_prop/'
     data_directory_pwr = 'wvgd_outputs/pwr_scan/input_pwr_scan/'
     data_directory_amp = 'wvgd_outputs/pwr_scan/input_pwr_scan_amp/'
 
-    pwr_data, pwr_lengths = obtain_pwr_data(data_directory_pwr)
-    amp_data, pwr_lengths = obtain_pwr_data(data_directory_amp)
-    all_pwr_data = merge_scan_data(pwr_data, amp_data)
-    sqz_vs_pwr(all_pwr_data, all_pwr_data[.01], .01, anti_sqz=False)
+    # pwr_data, pwr_lengths = obtain_pwr_data(data_directory_pwr)
+    # amp_data, pwr_lengths = obtain_pwr_data(data_directory_amp)
+    # all_pwr_data = merge_scan_data(pwr_data, amp_data)
+    # sqz_vs_pwr(all_pwr_data, all_pwr_data[.01], .01, anti_sqz=False)
 
 
-    # all_data, lengths = obtain_data(data_directory)
+    all_data, lengths = obtain_data(data_directory)
     # # print("Loaded data for lengths:", list(all_data.keys()))
     # # print(all_data[.003].keys())
 
     # # print(all_data[.01]['beta_2 at peak'])
 
-    # n_square_m(all_data, lengths)
+    n_square_m(all_data, lengths)
 
-    # meas_sqz(all_data, lengths, False)
+    meas_sqz(all_data, lengths, True)
 
     # beta2_plot(all_data, lengths)
 
