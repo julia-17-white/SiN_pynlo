@@ -668,7 +668,7 @@ def sim_with_noise_parallel(gd, file, length, pwr_ratio, fin_data, fig_path, pow
     
     print(f"Starting parallel simulation with {num_iter} iterations...")
     # Use >4 cores (leaving the rest of my PC free so it doesn't freeze up)
-    max_cores = 6
+    max_cores = 8
 
     # Start the multiprocessing pool
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_cores, initializer=init_worker, initargs=(gd, file, length, fin_data, pow)) as executor:
@@ -736,12 +736,12 @@ def sim_with_noise_parallel(gd, file, length, pwr_ratio, fin_data, fig_path, pow
 def main():
     widths = ['800', '1000', '1200', '1400', '1600', '1800', '2000', '2200', '2400', '2600', '2800', '3000', '3200', '3400', '3600',
               '3800', '4000', '4200', '4400', '4600', '4800', '5000'] # '800', '1000', 
-    widths = ['1400']
-    power_list = [10]
+    # widths = ['1400']
+    power_list = [5, 10, 15, 20, 25, 30, 35, 40, 50, 100, 150, 200, 250, 300, 350, 400]
     file_path1 = 'from_abijith/jw_modes/JW_SiN_O2Clad_800nmThickness_' 
     file_path2 = 'nmWidth_gamma_aeff.npy'
 
-    length = .003 #m
+    length = .01 #m
     pwr_ratio = .01
 
     # It is highly recommended to disable OpenMP threading when using ProcessPoolExecutor
