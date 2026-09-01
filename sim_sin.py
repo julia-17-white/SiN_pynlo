@@ -741,7 +741,7 @@ def main():
     file_path1 = 'from_abijith/jw_modes/JW_SiN_O2Clad_800nmThickness_' 
     file_path2 = 'nmWidth_gamma_aeff.npy'
 
-    length = .013 #m
+    length = .02 #m
     pwr_ratio = .01
 
     # It is highly recommended to disable OpenMP threading when using ProcessPoolExecutor
