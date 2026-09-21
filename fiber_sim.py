@@ -33,8 +33,10 @@ def setup_waveguide_and_pulse(fwhm):
     v_grid = pulse.v_grid
 
     # --- 2. Construct Constant Nonlinearity ---
-    gamma_pm = 0.00012  # Example value for PM-1550
-    gamma_nd = 0.0045  # Example value for ND Fiber
+    gamma_pm = 0  # Example value for PM-1550
+    gamma_nd = 0  # Example value for ND Fiber
+    # gamma_pm = 0.00012  # Example value for PM-1550
+    # gamma_nd = 0.0045  # Example value for ND Fiber
 
     gamma_array_pm = np.full_like(v_grid, gamma_pm)
     g3_v_pm = pynlo.utility.chi3.gamma_to_g3(v_grid, gamma_array_pm)
@@ -87,7 +89,7 @@ def propagate_pulse(pulse, mode, length):
     return new_pulse, z, a_t, a_v, sim
 
 
-def plot_osa_spectrum(a_v, sim, pulse, pulse_coh):
+def plot_osa_spectrum(a_v, sim, pulse, pulse_coh, fwhm):
     """
     Plots the spectrum mimicking an OSA output.
     X-axis: Wavelength (nm)
@@ -118,26 +120,26 @@ def plot_osa_spectrum(a_v, sim, pulse, pulse_coh):
     # p_out_dB -= max_dB
     
     # 4. Create the Plot
-    plt.figure("OSA Spectrum", figsize=(9, 6))
+    # plt.figure("OSA Spectrum", figsize=(9, 6))
     
-    plt.plot(wvl_nm, p_in_dB, color="tab:blue", label="Input")
-    plt.plot(wvl_nm, p_out_dB, color="tab:green", label="Output")
+    # plt.plot(wvl_nm, p_in_dB, color="tab:blue", label="Input")
+    # plt.plot(wvl_nm, p_out_dB, color="tab:green", label="Output")
     
-    plt.xlabel("Wavelength (nm)")
-    plt.ylabel("Intensity (dB/nm)")
-    plt.title("Simulated OSA Output Spectrum")
+    # plt.xlabel("Wavelength (nm)")
+    # plt.ylabel("Intensity (dB/nm)")
+    # plt.title("Simulated OSA Output Spectrum")
     
-    # Adjust these limits based on your specific pulse bandwidth
-    # plt.xlim(1000, 2200) 
-    plt.xlim(1500, 1620)
+    # # Adjust these limits based on your specific pulse bandwidth
+    # # plt.xlim(1000, 2200) 
+    # plt.xlim(1500, 1620)
     
-    # Dynamically scale the y-axis to focus on the top 60 dB of the signal
-    # plt.ylim(np.max(p_out_dB) - 60, np.max(p_out_dB) + 5)
+    # # Dynamically scale the y-axis to focus on the top 60 dB of the signal
+    # # plt.ylim(np.max(p_out_dB) - 60, np.max(p_out_dB) + 5)
     
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
+    # plt.legend()
+    # plt.grid(True)
+    # plt.tight_layout()
+    # plt.show()
 
     file = 'laser.CSV'
     data = pd.read_csv(file, skiprows = 44, header=None, names=['nm', 'dB/nm'])
@@ -152,7 +154,7 @@ def plot_osa_spectrum(a_v, sim, pulse, pulse_coh):
     plt.ylabel('Relative Intensity (dB/nm)', fontsize=12)
     plt.legend(fontsize=12)
     plt.grid(True)
-    plt.title('Pulse Spectrum into the Waveguide', fontsize=18)
+    plt.title(f'Pulse Spectrum into the Waveguide (fwhm = {fwhm} ps)', fontsize=14)
     plt.show()
 
 def nice_plot(a_v, sim, pulse, a_t, z):
@@ -218,11 +220,12 @@ def nd_run(fwhm = 208):
     return new_pulse
 
 if __name__ == '__main__':
-    pulse, mode_nd, mode_pm, v_grid = setup_waveguide_and_pulse()
+    fwhm = 2.0
+    pulse, mode_nd, mode_pm, v_grid = setup_waveguide_and_pulse(fwhm)
     pulse_init = copy.deepcopy(pulse)
-    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(pulse, mode_pm, length=1.7)
+    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(pulse, mode_pm, length=1.69)
     # nice_plot(a_v_out, sim, new_pulse, a_t, z)
-    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(new_pulse, mode_nd, length=1.7)
+    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(new_pulse, mode_nd, length=1.73)
     # nice_plot(a_v_out, sim, new_pulse, a_t, z)
-    plot_osa_spectrum(a_v_out, sim, new_pulse, pulse_init)
+    plot_osa_spectrum(a_v_out, sim, new_pulse, pulse_init, fwhm)
 
