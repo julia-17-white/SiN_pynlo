@@ -7,9 +7,9 @@ import pynlo
 import copy  # Added for cloning the pulse
 import pandas as pd
 
-def setup_waveguide_and_pulse():
+def setup_waveguide_and_pulse(fwhm):
     # --- Parameters ---
-    FWHM    = 0.205   # pulse duration (ps)
+    FWHM    = fwhm   # pulse duration (ps)
     pulseWL = 1562.5    # pulse central wavelength (nm)
     EPP     = 50e-12  # Energy per pulse (J)
     Window  = 20.0    # simulation window (ps)
@@ -207,10 +207,13 @@ def nice_plot(a_v, sim, pulse, a_t, z):
     ax2.set_ylabel('Length (mm)', labelpad = 20)
     plt.show()
 
-def nd_run():
-    pulse, mode_nd, mode_pm, v_grid = setup_waveguide_and_pulse()
+def nd_run(fwhm = 208):
+    pulse, mode_nd, mode_pm, v_grid = setup_waveguide_and_pulse(fwhm)
+    # pulse_init = copy.deepcopy(pulse)
     new_pulse, z, a_t, a_v_out, sim = propagate_pulse(pulse, mode_pm, length=1.69)
     new_pulse, z, a_t, a_v_out, sim = propagate_pulse(new_pulse, mode_nd, length=1.73)
+
+    # plot_osa_spectrum(a_v_out, sim, new_pulse, pulse_init)
 
     return new_pulse
 

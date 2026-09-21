@@ -36,7 +36,7 @@ import itertools
 # from pynlo.utility import fft
 
 
-def setup_waveguide_and_pulse(gd, file, length, fin_data, pow):
+def setup_waveguide_and_pulse(gd, file, length, fin_data, pow, fwhm):
     '''
     Creates the base pulse and waveguide that will be used.
     Params:
@@ -56,7 +56,7 @@ def setup_waveguide_and_pulse(gd, file, length, fin_data, pow):
 
     n_points = 2**13 # 20 for sidebands
     
-    pulse = fiber_sim.nd_run()
+    pulse = fiber_sim.nd_run(fwhm)
     pulse.a_v = pulse.a_v * fib_loss * coup_loss_perc
     # print("Frq Res: {:.3g} GHz".format(pulse.dv * 1e-9))
     v_grid = pulse.v_grid
@@ -447,7 +447,7 @@ _worker_mode = None
 _worker_v_grid = None
 _worker_a_v_lo = None
 
-def init_worker(gd, file, length, fin_data, pow):
+def init_worker(gd, file, length, fin_data, pow, fwhm):
     """
     This runs once on each CPU core when the process pool spawns.
     It initializes the un-picklable pynlo objects locally on that core.
@@ -455,7 +455,7 @@ def init_worker(gd, file, length, fin_data, pow):
     global _worker_pulse, _worker_mode, _worker_v_grid, _worker_a_v_lo, _worker_a_v_clean_out
     
     # Generate the base pulse and mode directly on this core
-    _worker_pulse, _worker_mode, _worker_v_grid = setup_waveguide_and_pulse(gd, file, length, fin_data, pow)
+    _worker_pulse, _worker_mode, _worker_v_grid = setup_waveguide_and_pulse(gd, file, length, fin_data, pow, fwhm)
     _worker_a_v_lo = copy.deepcopy(_worker_pulse.a_v)
     clean_pulse = copy.deepcopy(_worker_pulse)
     
@@ -617,7 +617,7 @@ def run_single_iteration(iteration_index, length):
 
 
 # Simulations with injected noise:
-def sim_with_noise_parallel(gd, file, length, pwr_ratio, fin_data, fig_path, pow):
+def sim_with_noise_parallel(gd, file, length, pwr_ratio, fin_data, fig_path, pow, fwhm):
     '''
     Method that runs the main pulse propagation to variance readout on 2 cores.
     It runs an initial propagation where you can create diagnostic plots before doing the multi-core variance propagations and readout.
@@ -634,7 +634,7 @@ def sim_with_noise_parallel(gd, file, length, pwr_ratio, fin_data, fig_path, pow
     
     # 1. Setup everything once
     print("Setting up mode and base pulse...")
-    base_pulse, mode, v_grid = setup_waveguide_and_pulse(gd, file, length, fin_data, pow)
+    base_pulse, mode, v_grid = setup_waveguide_and_pulse(gd, file, length, fin_data, pow, fwhm)
     
     # Run one sequential test iteration on the main thread
     print("Running diagnostic single iteration...")
@@ -671,7 +671,7 @@ def sim_with_noise_parallel(gd, file, length, pwr_ratio, fin_data, fig_path, pow
     max_cores = 8
 
     # Start the multiprocessing pool
-    with concurrent.futures.ProcessPoolExecutor(max_workers=max_cores, initializer=init_worker, initargs=(gd, file, length, fin_data, pow)) as executor:
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max_cores, initializer=init_worker, initargs=(gd, file, length, fin_data, pow, fwhm)) as executor:
         
         # executor.map guarantees the output list matches the input sequence order
         results = executor.map(run_single_iteration, range(num_iter), itertools.repeat(length))
@@ -734,10 +734,13 @@ def sim_with_noise_parallel(gd, file, length, pwr_ratio, fin_data, fig_path, pow
 
 
 def main():
-    widths = ['800', '1000', '1200', '1400', '1600', '1800', '2000', '2200', '2400', '2600', '2800', '3000', '3200', '3400', '3600',
-              '3800', '4000', '4200', '4400', '4600', '4800', '5000'] # '800', '1000', 
-    # widths = ['1400']
-    power_list = [5, 10, 15, 20, 25, 30, 35, 40, 50, 100, 150, 200, 250, 300, 350, 400]
+    # widths = ['800', '1000', '1200', '1400', '1600', '1800', '2000', '2200', '2400', '2600', '2800', '3000', '3200', '3400', '3600',
+    #           '3800', '4000', '4200', '4400', '4600', '4800', '5000'] # '800', '1000', 
+    widths = ['1400']
+    # power_list = [5, 10, 15, 20, 25, 30, 35, 40, 50, 100, 150, 200, 250, 300, 350, 400]
+    power_list = [40]
+    # fwhm_list = [.208, .4, .6, .8, 1.0, 1.5, 2.0]
+    fwhm_list = [.4]
     file_path1 = 'from_abijith/jw_modes/JW_SiN_O2Clad_800nmThickness_' 
     file_path2 = 'nmWidth_gamma_aeff.npy'
 
@@ -748,69 +751,70 @@ def main():
     # so threads and processes don't fight for CPU time.
     os.environ["OMP_NUM_THREADS"] = "1"
     
-    csv_path = 'wvgd_outputs/pwr_scan_co_prop/input_pwr_scan/p' + str(length)[2:] + 'm/'
+    csv_path = 'wvgd_outputs/input_pulse_width_scan_co_prop/p' + str(length)[2:] + 'm/'
 
     for power in power_list:
-        fin_data = {'width':[], 'beta_2 at peak': [], 'average beta2': [], 'gamma at peak': [], 'average gamma': [],
-                'dispersive length':[], 'nonlinear length':[],
-                'number of soliton periods':[], 'N^2': [], 'phi_nonlin': [], 'dB squeezing': [],
-                'dB anti-squeezing': [], 'dB constructive interference': [], 'dB destructive interference': [],
-                'phase offset (rad)': []}
-        for width in widths:
-            start_time = time.time()
-            fig_path = csv_path + 'generated_plots/p' + str(power) + 'mW/' + str(width) + 'nm/' # str(length)[2:] + 'm/'
-            os.makedirs(fig_path, exist_ok=True)
+        for fwhm in fwhm_list:
+            fin_data = {'width':[], 'beta_2 at peak': [], 'average beta2': [], 'gamma at peak': [], 'average gamma': [],
+                    'dispersive length':[], 'nonlinear length':[],
+                    'number of soliton periods':[], 'N^2': [], 'phi_nonlin': [], 'dB squeezing': [],
+                    'dB anti-squeezing': [], 'dB constructive interference': [], 'dB destructive interference': [],
+                    'phase offset (rad)': []}
+            for width in widths:
+                start_time = time.time()
+                fig_path = csv_path + 'generated_plots/p' + str(power) +'_' + str(fwhm*1000) + 'fs/' + str(width) + 'nm/' # str(length)[2:] + 'm/'
+                os.makedirs(fig_path, exist_ok=True)
 
-            fin_data['width'].append(width)
+                fin_data['width'].append(width)
 
-            print('')
-            print('*'*50)
-            print('')
-            print(f'starting run for {width}nm wide waveguide at {power}mW inpput power')
+                print('')
+                print('*'*50)
+                print('')
+                print(f'starting run for {width}nm wide waveguide at {power}mW inpput power')
 
-            file = file_path1 + width + file_path2
-        
-            var_baseline, var_base_ref, _, _ = sim_with_noise_parallel(0, file, length, pwr_ratio, fin_data, fig_path, power)
-            var_measured, var_ref, var_signal, phases = sim_with_noise_parallel(1, file, length, pwr_ratio, fin_data, fig_path, power)
-
-            squeezing_dB = 10*np.log10(
-                var_measured/var_ref
-            )
-            fin_data['dB squeezing'].append(np.min(squeezing_dB))
-            fin_data['dB anti-squeezing'].append(np.max(squeezing_dB))
-
-            squeezing_dB_snl = 10*np.log10(
-                var_baseline/var_base_ref
-            )
-            fin_data['dB constructive interference'].append(np.max(squeezing_dB_snl))
-            fin_data['dB destructive interference'].append(np.min(squeezing_dB_snl))
-            # sqz_dB_offset = np.mean(squeezing_dB_snl)
-
-            plt.figure(figsize=(8, 5))
-            plt.plot(phases, squeezing_dB, label='Output State Noise above SNL', color='indigo', linewidth=2)
-            plt.plot(phases, squeezing_dB_snl, label='Shot Noise Variation', color='forestgreen', linewidth=2)
-            plt.axhline(0, color='k', linestyle='--', label='Shot Noise Limit (SNL)')
-            plt.xlabel('Local Oscillator Phase (rad)')
-            plt.ylabel('Quantum Noise Variance (dB)')
-            plt.title('Predicted Squeezing vs. LO Phase')
-            # plt.xlim(0, 2*np.pi)
-            plt.legend(loc='upper right')
-            plt.grid(True)
-            plt.savefig(f'{fig_path}dB_squeezing.svg')
-            plt.close()
+                file = file_path1 + width + file_path2
             
-            # plt.show()
+                var_baseline, var_base_ref, _, _ = sim_with_noise_parallel(0, file, length, pwr_ratio, fin_data, fig_path, power, fwhm)
+                var_measured, var_ref, var_signal, phases = sim_with_noise_parallel(1, file, length, pwr_ratio, fin_data, fig_path, power, fwhm)
 
-            print(f"Maximum Squeezing: {np.min(squeezing_dB):.2f} dB")
-            print(f"Maximum Anti-Squeezing: {np.max(squeezing_dB):.2f} dB")
+                squeezing_dB = 10*np.log10(
+                    var_measured/var_ref
+                )
+                fin_data['dB squeezing'].append(np.min(squeezing_dB))
+                fin_data['dB anti-squeezing'].append(np.max(squeezing_dB))
 
-            phase_diff = calculate_peak_offset(phases, squeezing_dB, squeezing_dB_snl)
-            fin_data['phase offset (rad)'].append(phase_diff)
-            print(f'Phase offset: {phase_diff/np.pi:.2f} Pi')
+                squeezing_dB_snl = 10*np.log10(
+                    var_baseline/var_base_ref
+                )
+                fin_data['dB constructive interference'].append(np.max(squeezing_dB_snl))
+                fin_data['dB destructive interference'].append(np.min(squeezing_dB_snl))
+                # sqz_dB_offset = np.mean(squeezing_dB_snl)
+
+                plt.figure(figsize=(8, 5))
+                plt.plot(phases, squeezing_dB, label='Output State Noise above SNL', color='indigo', linewidth=2)
+                plt.plot(phases, squeezing_dB_snl, label='Shot Noise Variation', color='forestgreen', linewidth=2)
+                plt.axhline(0, color='k', linestyle='--', label='Shot Noise Limit (SNL)')
+                plt.xlabel('Local Oscillator Phase (rad)')
+                plt.ylabel('Quantum Noise Variance (dB)')
+                plt.title('Predicted Squeezing vs. LO Phase')
+                # plt.xlim(0, 2*np.pi)
+                plt.legend(loc='upper right')
+                plt.grid(True)
+                plt.savefig(f'{fig_path}dB_squeezing.svg')
+                plt.close()
+                
+                # plt.show()
+
+                print(f"Maximum Squeezing: {np.min(squeezing_dB):.2f} dB")
+                print(f"Maximum Anti-Squeezing: {np.max(squeezing_dB):.2f} dB")
+
+                phase_diff = calculate_peak_offset(phases, squeezing_dB, squeezing_dB_snl)
+                fin_data['phase offset (rad)'].append(phase_diff)
+                print(f'Phase offset: {phase_diff/np.pi:.2f} Pi')
 
 
-            end_time = time.time()
-            print(f'Total run time = {(end_time - start_time):.2f} s')
+                end_time = time.time()
+                print(f'Total run time = {(end_time - start_time):.2f} s')
 
         # print(fin_data)
 
