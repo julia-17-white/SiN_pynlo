@@ -314,7 +314,7 @@ def obtain_data(data_directory):
 
     return all_data, lengths
 
-def obtain_pwr_data(base_directory):
+def obtain_width_data(base_directory):
     '''
     Method to obtain the power scan data.
     Builds a nested dictionary: all_data[length][power] = dict_of_lists
@@ -352,15 +352,15 @@ def obtain_pwr_data(base_directory):
         # 5. Get and sort the power .csv files
         files = [f for f in os.listdir(l_dir_path) if f.endswith('mW.csv')]
         
-        def extract_power(filename):
+        def extract_pulse_width(filename):
             # Remove 'mW.csv' to get the power float/int
             return float(filename.replace('mW.csv', ''))
             
-        files.sort(key=extract_power)
+        files.sort(key=extract_pulse_width)
         
         # 6. Loop through files, read, and populate the nested dictionary
         for file_name in files:
-            power_val = extract_power(file_name)
+            width_val = extract_pulse_width(file_name)
             file_path = os.path.join(l_dir_path, file_name)
             
             df = pd.read_csv(file_path)
@@ -372,7 +372,7 @@ def obtain_pwr_data(base_directory):
             # if 'dB anti-squeezing' in df.columns and 'dB squeezing' in df.columns:
             #     df = df.rename(columns={'dB anti-squeezing': 'dB squeezing', 'dB squeezing': 'dB anti-squeezing'})
 
-            all_data[length_val][power_val] = df.to_dict(orient='list')
+            all_data[length_val][width_val] = df.to_dict(orient='list')
 
     return all_data, lengths_found
 

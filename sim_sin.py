@@ -818,10 +818,10 @@ def main():
 
         # print(fin_data)
 
-        fin_data_df = pd.DataFrame(data=fin_data)
-        print(fin_data_df.head())
+            fin_data_df = pd.DataFrame(data=fin_data)
+            print(fin_data_df.head())
 
-        fin_data_df.to_csv(csv_path + str(power) + 'mW.csv') #(csv_path + str(length) + 'm.csv')
+            fin_data_df.to_csv(csv_path + str(power) + 'mW_' + str(fwhm*1000) + 'fs.csv') #(csv_path + str(length) + 'm.csv')
 
 
 # --- Execution Block ---
