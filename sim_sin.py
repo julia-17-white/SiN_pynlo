@@ -770,7 +770,7 @@ def main():
                 print('')
                 print('*'*50)
                 print('')
-                print(f'starting run for {width}nm wide waveguide at {power}mW inpput power')
+                print(f'starting run for {width}nm wide waveguide at {power}mW inpput power and {fwhm}ps input pulse width')
 
                 file = file_path1 + width + file_path2
             
@@ -816,7 +816,7 @@ def main():
                 end_time = time.time()
                 print(f'Total run time = {(end_time - start_time):.2f} s')
 
-        # print(fin_data)
+            # print(fin_data)
 
             fin_data_df = pd.DataFrame(data=fin_data)
             print(fin_data_df.head())
