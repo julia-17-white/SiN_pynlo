@@ -138,7 +138,7 @@ def setup_waveguide_and_pulse(gamma, D):
 
     return pulse, mode, v_grid, pulse_coh
 
-def propagate_pulse(pulse, mode, length=7.0):
+def propagate_pulse(pulse, mode, length=90.0):
     '''
     Propagates the input pulse through the mode (waveguide).
     Params:
@@ -222,7 +222,7 @@ def nice_plot(a_v, sim, pulse, a_t, z):
     ax2.set_ylabel('Length (mm)', labelpad = 20)
     plt.show()
 
-def nonlin_phas_shift(a_t, pulse, mode, length=7.0):
+def nonlin_phas_shift(a_t, pulse, mode, length=90.0):
     '''
     Method to calculate the nonlinear phase shift that occurs in the waveguide.
     Params:
@@ -362,7 +362,7 @@ def pulse_interference(a_v, pulse):
 
 
 def plot_osa_spectrum(a_v, sim, pulse, pulse_coh, a_v_aux):
-    length = 7.0
+    length = 90.0
     """
     Plots the spectrum mimicking an OSA output.
     X-axis: Wavelength (nm)
@@ -436,7 +436,7 @@ def init_worker(gamma, D):
     _worker_pulse, _worker_mode, _worker_v_grid, _pulse_coh = setup_waveguide_and_pulse(gamma, D)
     
     clean_pulse = copy.deepcopy(_worker_pulse)
-    _, _, _, a_v_clean, _ = propagate_pulse(clean_pulse, _worker_mode, length=7.0)
+    _, _, _, a_v_clean, _ = propagate_pulse(clean_pulse, _worker_mode, length=90.0)
     _worker_a_v_clean_out = a_v_clean[-1]
     
     # Use the perfectly matched output mean field as the LO
@@ -533,7 +533,7 @@ def run_single_iteration(iteration_index):
     noisy_pulse.a_v = noisy_input_v
     
     # Propagate the noisy pulse
-    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(noisy_pulse, _worker_mode, length=7.0)
+    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(noisy_pulse, _worker_mode, length=90.0)
     delta_a_v = a_v_out[-1] - _worker_a_v_clean_out 
     I_ref = np.sum(np.abs(a_v_out[-1])**2) * _worker_pulse.dv
     
@@ -587,10 +587,10 @@ def sim_with_noise_parallel(gamma, D):
     # 1. Setup everything once
     print("Setting up mode and base pulse...")
     base_pulse, mode, v_grid, pulse_coh = setup_waveguide_and_pulse(gamma, D)
-    prop_pulse, z, a_t, a_v_out, sim = propagate_pulse(base_pulse, mode, length=7.0)
+    prop_pulse, z, a_t, a_v_out, sim = propagate_pulse(base_pulse, mode, length=90.0)
     aux_base = copy.deepcopy(base_pulse)
     aux_base.a_v = aux_base.a_v * field_ratio
-    aux_prop, _, _, a_v_aux, _ = propagate_pulse(aux_base, mode, length=7.0)
+    aux_prop, _, _, a_v_aux, _ = propagate_pulse(aux_base, mode, length=90.0)
     
     # Run one sequential test iteration on the main thread
     print("Running diagnostic single iteration...")
@@ -604,13 +604,13 @@ def sim_with_noise_parallel(gamma, D):
     input_pulse.a_v = noisy_a_v_in 
     
     # Propagate the noisy pulse through the waveguide
-    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(input_pulse, mode, length=7.0)
+    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(input_pulse, mode, length=90.0)
     
     # Safely plot the results on the main thread
     # nice_plot(a_v_out, sim, new_pulse, a_t, z)
     plot_osa_spectrum(a_v_out, sim, new_pulse, pulse_coh, a_v_aux)
     # verify_vacuum_energy(base_pulse, v_grid, 1000)
-    # nonlin_phas_shift(a_t, new_pulse, mode, length=7.0)
+    # nonlin_phas_shift(a_t, new_pulse, mode, length=90.0)
     # pulse_interference(a_v_out, new_pulse)
     
     # Lists to store the complex overlap integrals
@@ -620,7 +620,7 @@ def sim_with_noise_parallel(gamma, D):
     
     print(f"Starting parallel baselin simulation with {num_iter} iterations...")
     # Use >4 cores (leaving the rest of my PC free so it doesn't freeze up)
-    max_cores = 2
+    max_cores = 10
 
     # Start the multiprocessing pool
     # with concurrent.futures.ProcessPoolExecutor(max_workers=max_cores, initializer=init_worker, initargs=(gamma, D)) as executor:
@@ -767,7 +767,7 @@ if __name__ == '__main__':
     # It is highly recommended to disable OpenMP threading when using ProcessPoolExecutor
     # so threads and processes don't fight for CPU time.
     os.environ["OMP_NUM_THREADS"] = "1"
-    length = 7.0
+    length = 90.0
     
     start_time = time.time()
     var_baseline, var_base_ref, _, _ = sim_with_noise_parallel(0, 0)
