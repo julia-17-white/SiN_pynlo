@@ -113,8 +113,8 @@ def setup_waveguide_and_pulse(gamma, D):
     print('')
     beta2 = mode.beta2
     print(f"Mean Beta2 : {np.mean(beta2):.3e} s^2/m")
-    beta2 = mode.gamma
-    print(f"Mean gamma : {np.mean(gamma):.3e} s^2/m")
+    gamma_mode = mode.gamma
+    print(f"Mean gamma : {np.mean(gamma_mode):.3e} s^2/m")
 
     # --- Calculate Soliton Period ---
     # Find the exact beta_2 at the central frequency (v0)
@@ -362,6 +362,7 @@ def pulse_interference(a_v, pulse):
 
 
 def plot_osa_spectrum(a_v, sim, pulse, pulse_coh, a_v_aux):
+    length = 7.0
     """
     Plots the spectrum mimicking an OSA output.
     X-axis: Wavelength (nm)
@@ -415,7 +416,8 @@ def plot_osa_spectrum(a_v, sim, pulse, pulse_coh, a_v_aux):
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    plt.show()
+    plt.savefig(f'wvgd_outputs/mkk_results/{length}m/osa_spectrum.svg')
+    plt.close()
 
 
 # Global placeholders that will live inside each separate worker core process
@@ -605,7 +607,7 @@ def sim_with_noise_parallel(gamma, D):
     new_pulse, z, a_t, a_v_out, sim = propagate_pulse(input_pulse, mode, length=7.0)
     
     # Safely plot the results on the main thread
-    nice_plot(a_v_out, sim, new_pulse, a_t, z)
+    # nice_plot(a_v_out, sim, new_pulse, a_t, z)
     plot_osa_spectrum(a_v_out, sim, new_pulse, pulse_coh, a_v_aux)
     # verify_vacuum_energy(base_pulse, v_grid, 1000)
     # nonlin_phas_shift(a_t, new_pulse, mode, length=7.0)
@@ -765,10 +767,11 @@ if __name__ == '__main__':
     # It is highly recommended to disable OpenMP threading when using ProcessPoolExecutor
     # so threads and processes don't fight for CPU time.
     os.environ["OMP_NUM_THREADS"] = "1"
+    length = 7.0
     
     start_time = time.time()
     var_baseline, var_base_ref, _, _ = sim_with_noise_parallel(0, 0)
-    var_measured, var_ref, var_signal, phases = sim_with_noise_parallel(10.7 / 1000.0 , 5.6)
+    var_measured, var_ref, var_signal, phases = sim_with_noise_parallel(1.4 / 1000.0 , 18)
 
     squeezing_dB = 10*np.log10(
         var_measured/var_ref
@@ -791,7 +794,8 @@ if __name__ == '__main__':
     # plt.xlim(0, 2*np.pi)
     plt.legend(loc='upper right')
     plt.grid(True)
-    plt.show()
+    plt.savefig(f'wvgd_outputs/mkk_results/{length}m/db_squeezing.svg')
+    plt.close()
     
     print(f"Maximum Squeezing: {np.min(squeezing_dB - sqz_dB_offset):.2f} dB")
     print(f"Maximum Anti-Squeezing: {np.max(squeezing_dB - sqz_dB_offset):.2f} dB")
