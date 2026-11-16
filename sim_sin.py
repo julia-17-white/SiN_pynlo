@@ -416,7 +416,7 @@ def plot_osa_spectrum(a_v, sim, pulse, pulse_coh, a_v_aux):
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig(f'wvgd_outputs/mkk_results/{length}m/osa_spectrum.svg')
+    plt.savefig(f'wvgd_outputs/mkk_results/{length}m_hnlf/osa_spectrum.svg')
     plt.close()
 
 
@@ -771,7 +771,7 @@ if __name__ == '__main__':
     
     start_time = time.time()
     var_baseline, var_base_ref, _, _ = sim_with_noise_parallel(0, 0)
-    var_measured, var_ref, var_signal, phases = sim_with_noise_parallel(1.4 / 1000.0 , 18)
+    var_measured, var_ref, var_signal, phases = sim_with_noise_parallel(10.7 / 1000.0 , 5.6)
 
     squeezing_dB = 10*np.log10(
         var_measured/var_ref
@@ -794,7 +794,7 @@ if __name__ == '__main__':
     # plt.xlim(0, 2*np.pi)
     plt.legend(loc='upper right')
     plt.grid(True)
-    plt.savefig(f'wvgd_outputs/mkk_results/{length}m/db_squeezing.svg')
+    plt.savefig(f'wvgd_outputs/mkk_results/{length}m_hnlf/db_squeezing.svg')
     plt.close()
     
     print(f"Maximum Squeezing: {np.min(squeezing_dB - sqz_dB_offset):.2f} dB")
