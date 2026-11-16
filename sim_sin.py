@@ -45,13 +45,13 @@ def setup_waveguide_and_pulse(gamma, D):
 
     # Pulse
     v_min, v_max, v0 = c/4000e-9, c/400e-9, c/1560e-9
-    e_p, t_fwhm = 40e-12, 210e-15
+    e_p, t_fwhm = 150e-12, 210e-15
 
     n_points = 2**13 # 20 for sidebands
 
     pulse = fiber_sim.nd_run()
     pulse_coh = copy.deepcopy(pulse)
-    pulse.a_v = pulse.a_v * ((17e-12)/e_p)
+    pulse.a_v = pulse.a_v * (e_p/50e-12)
     print("Frq Res: {:.3g} GHz".format(pulse.dv * 1e-9))
     v_grid = pulse.v_grid
 
@@ -138,7 +138,7 @@ def setup_waveguide_and_pulse(gamma, D):
 
     return pulse, mode, v_grid, pulse_coh
 
-def propagate_pulse(pulse, mode, length=90.0):
+def propagate_pulse(pulse, mode, length=120.0):
     '''
     Propagates the input pulse through the mode (waveguide).
     Params:
@@ -222,7 +222,7 @@ def nice_plot(a_v, sim, pulse, a_t, z):
     ax2.set_ylabel('Length (mm)', labelpad = 20)
     plt.show()
 
-def nonlin_phas_shift(a_t, pulse, mode, length=90.0):
+def nonlin_phas_shift(a_t, pulse, mode, length=120.0):
     '''
     Method to calculate the nonlinear phase shift that occurs in the waveguide.
     Params:
@@ -316,7 +316,7 @@ def pulse_interference(a_v, pulse):
     # and a_v_aux is the newly created auxiliary pulse object
     # I'll create it here
 
-    e_p_aux = e_p/100
+    e_p_aux = e_p #/100
     pulse_aux = pynlo.light.Pulse.Sech(n_points, v_min, v_max, v0, e_p_aux, t_fwhm)
     a_v_aux = inject_noise(pulse_aux.a_v, pulse_aux.v_grid, pulse_aux, local_rng=np.random.default_rng(seed_value - 1))
     # a_v_aux = noisy_aux.a_v
@@ -362,7 +362,7 @@ def pulse_interference(a_v, pulse):
 
 
 def plot_osa_spectrum(a_v, sim, pulse, pulse_coh, a_v_aux):
-    length = 90.0
+    length = 120.0
     """
     Plots the spectrum mimicking an OSA output.
     X-axis: Wavelength (nm)
@@ -416,7 +416,7 @@ def plot_osa_spectrum(a_v, sim, pulse, pulse_coh, a_v_aux):
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig(f'wvgd_outputs/mkk_results/{length}m_hnlf/osa_spectrum.svg')
+    plt.savefig(f'wvgd_outputs/mkk_results/150mw/{length}m/osa_spectrum.svg')
     plt.close()
 
 
@@ -436,12 +436,12 @@ def init_worker(gamma, D):
     _worker_pulse, _worker_mode, _worker_v_grid, _pulse_coh = setup_waveguide_and_pulse(gamma, D)
     
     clean_pulse = copy.deepcopy(_worker_pulse)
-    _, _, _, a_v_clean, _ = propagate_pulse(clean_pulse, _worker_mode, length=90.0)
+    _, _, _, a_v_clean, _ = propagate_pulse(clean_pulse, _worker_mode, length=120.0)
     _worker_a_v_clean_out = a_v_clean[-1]
     
     # Use the perfectly matched output mean field as the LO
     field_ratio = np.sqrt(150e-6 / 14.7e-3)
-    _worker_a_v_lo = field_ratio * copy.deepcopy(_worker_a_v_clean_out)
+    _worker_a_v_lo =  copy.deepcopy(_worker_a_v_clean_out) # * field_ratio # *
 
 
 def inject_noise(a_v, v_grid, pulse, local_rng):
@@ -533,7 +533,7 @@ def run_single_iteration(iteration_index):
     noisy_pulse.a_v = noisy_input_v
     
     # Propagate the noisy pulse
-    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(noisy_pulse, _worker_mode, length=90.0)
+    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(noisy_pulse, _worker_mode, length=120.0)
     delta_a_v = a_v_out[-1] - _worker_a_v_clean_out 
     I_ref = np.sum(np.abs(a_v_out[-1])**2) * _worker_pulse.dv
     
@@ -587,10 +587,10 @@ def sim_with_noise_parallel(gamma, D):
     # 1. Setup everything once
     print("Setting up mode and base pulse...")
     base_pulse, mode, v_grid, pulse_coh = setup_waveguide_and_pulse(gamma, D)
-    prop_pulse, z, a_t, a_v_out, sim = propagate_pulse(base_pulse, mode, length=90.0)
+    prop_pulse, z, a_t, a_v_out, sim = propagate_pulse(base_pulse, mode, length=120.0)
     aux_base = copy.deepcopy(base_pulse)
     aux_base.a_v = aux_base.a_v * field_ratio
-    aux_prop, _, _, a_v_aux, _ = propagate_pulse(aux_base, mode, length=90.0)
+    aux_prop, _, _, a_v_aux, _ = propagate_pulse(aux_base, mode, length=120.0)
     
     # Run one sequential test iteration on the main thread
     print("Running diagnostic single iteration...")
@@ -604,13 +604,13 @@ def sim_with_noise_parallel(gamma, D):
     input_pulse.a_v = noisy_a_v_in 
     
     # Propagate the noisy pulse through the waveguide
-    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(input_pulse, mode, length=90.0)
+    new_pulse, z, a_t, a_v_out, sim = propagate_pulse(input_pulse, mode, length=120.0)
     
     # Safely plot the results on the main thread
     # nice_plot(a_v_out, sim, new_pulse, a_t, z)
     plot_osa_spectrum(a_v_out, sim, new_pulse, pulse_coh, a_v_aux)
     # verify_vacuum_energy(base_pulse, v_grid, 1000)
-    # nonlin_phas_shift(a_t, new_pulse, mode, length=90.0)
+    # nonlin_phas_shift(a_t, new_pulse, mode, length=120.0)
     # pulse_interference(a_v_out, new_pulse)
     
     # Lists to store the complex overlap integrals
@@ -767,11 +767,11 @@ if __name__ == '__main__':
     # It is highly recommended to disable OpenMP threading when using ProcessPoolExecutor
     # so threads and processes don't fight for CPU time.
     os.environ["OMP_NUM_THREADS"] = "1"
-    length = 90.0
+    length = 120.0
     
     start_time = time.time()
     var_baseline, var_base_ref, _, _ = sim_with_noise_parallel(0, 0)
-    var_measured, var_ref, var_signal, phases = sim_with_noise_parallel(10.7 / 1000.0 , 5.6)
+    var_measured, var_ref, var_signal, phases = sim_with_noise_parallel(1.4/1000.0, 18) #10.7 / 1000.0 , 5.6)
 
     squeezing_dB = 10*np.log10(
         var_measured/var_ref
@@ -794,7 +794,7 @@ if __name__ == '__main__':
     # plt.xlim(0, 2*np.pi)
     plt.legend(loc='upper right')
     plt.grid(True)
-    plt.savefig(f'wvgd_outputs/mkk_results/{length}m_hnlf/db_squeezing.svg')
+    plt.savefig(f'wvgd_outputs/mkk_results/150mw/{length}m/db_squeezing.svg')
     plt.close()
     
     print(f"Maximum Squeezing: {np.min(squeezing_dB - sqz_dB_offset):.2f} dB")
